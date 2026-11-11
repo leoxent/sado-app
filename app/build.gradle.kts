@@ -69,13 +69,14 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
     implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
+    // the body outline for the shoulder:waist ratio; pose only finds which rows are shoulders and hips
+    implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.anthropic:anthropic-java:2.34.0")
     implementation("androidx.health.connect:connect-client:1.1.0-alpha12") // last version that builds with compileSdk 35 / AGP 8.7
     // Health Connect brings Guava at runtime only; CameraX code needs its ListenableFuture at compile time
     implementation("com.google.guava:guava:31.1-android")
 }
-
 
 // screenshot tests: render real screens on the JVM (Robolectric) and save PNGs with Roborazzi
 android.testOptions.unitTests.isIncludeAndroidResources = true

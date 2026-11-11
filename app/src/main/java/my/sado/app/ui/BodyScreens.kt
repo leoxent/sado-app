@@ -89,6 +89,10 @@ import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.PoseLandmark
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
+import com.google.mlkit.vision.segmentation.Segmentation
+import com.google.mlkit.vision.segmentation.SegmentationMask
+import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
+import my.sado.app.data.Silhouette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -127,22 +131,43 @@ object Photos {
         if (deg == 0f) bmp else Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, Matrix().apply { postRotate(deg) }, true)
     }.getOrNull()
 
-    // shoulder width over hip width from on-device pose landmarks; nothing leaves the phone
-    suspend fun ratio(context: Context, f: File): Float? = runCatching {
-        val image = InputImage.fromFilePath(context, Uri.fromFile(f))
+    // shoulder:waist from the body outline (selfie segmentation), on the device; pose landmarks only find the rows.
+    // Front photos only: a back photo's outline is the same width but reads the lats differently.
+    suspend fun measure(context: Context, name: String): Silhouette.Measure? = runCatching {
+        val bmp = load(context, name, 720) ?: return null // EXIF rotation applied, so pose and mask share one frame
+        val image = InputImage.fromBitmap(bmp, 0)
         val detector = PoseDetection.getClient(PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.SINGLE_IMAGE_MODE).build())
         val pose = suspendCancellableCoroutine<Pose?> { cont ->
             detector.process(image).addOnSuccessListener { cont.resume(it) }.addOnFailureListener { cont.resume(null) }
-        } ?: return null
+        }.also { detector.close() } ?: return null
         val ls = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER) ?: return null
         val rs = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER) ?: return null
         val lh = pose.getPoseLandmark(PoseLandmark.LEFT_HIP) ?: return null
         val rh = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP) ?: return null
         if (listOf(ls, rs, lh, rh).any { it.inFrameLikelihood < 0.5f }) return null
-        val sw = hypot(ls.position.x - rs.position.x, ls.position.y - rs.position.y)
-        val hw = hypot(lh.position.x - rh.position.x, lh.position.y - rh.position.y)
-        if (hw < 1f) null else sw / hw
+        val segmenter = Segmentation.getClient(SelfieSegmenterOptions.Builder().setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE).build())
+        val mask = suspendCancellableCoroutine<SegmentationMask?> { cont ->
+            segmenter.process(image).addOnSuccessListener { cont.resume(it) }.addOnFailureListener { cont.resume(null) }
+        }.also { segmenter.close() } ?: return null
+        val buf = mask.buffer.apply { rewind() }.asFloatBuffer()
+        val px = FloatArray(mask.width * mask.height).also { buf.get(it) }
+        // the mask can come back at another size than the photo: scale the landmark rows into it
+        val sx = mask.width / bmp.width.toFloat()
+        val sy = mask.height / bmp.height.toFloat()
+        val shoulderY = (ls.position.y + rs.position.y) / 2 * sy
+        val hipY = (lh.position.y + rh.position.y) / 2 * sy
+        val cx = (ls.position.x + rs.position.x + lh.position.x + rh.position.x) / 4 * sx
+        Silhouette.measure(px, mask.width, mask.height, shoulderY, hipY, cx)
     }.getOrNull()
+
+    /** Front photos still on the old joint ratio get measured from their outline; back photos lose theirs. */
+    suspend fun remeasure(context: Context) {
+        val old = Store.state.value.photos.filter { it.ratioKind == 0 }
+        old.forEach { p ->
+            val m = if (p.angle == 0) measure(context, p.file) else null
+            Store.update { s -> s.copy(photos = s.photos.map { if (it.file == p.file) it.copy(ratio = m?.ratio, shoulderPx = m?.shoulderPx, waistPx = m?.waistPx, ratioKind = 1) else it }) }
+        }
+    }
 
     // removes the record and the private file; ratio trend recomputes from what's left
     fun delete(context: Context, file: String) {
@@ -152,7 +177,7 @@ object Photos {
 
     // trend over front photos: rolling mean of the last 3 so one slouchy photo doesn't swing it
     fun trend(photos: List<ProgressPhoto>): List<Float> {
-        val r = photos.filter { it.angle == 0 && it.ratio != null }.sortedBy { it.epochDay }.map { it.ratio!! }
+        val r = photos.filter { it.angle == 0 && it.ratioKind == 1 && it.ratio != null }.sortedBy { it.epochDay }.map { it.ratio!! }
         return r.indices.map { i -> r.subList(maxOf(0, i - 2), i + 1).average().toFloat() }
     }
 }
@@ -169,6 +194,9 @@ fun PhotoThumb(name: String, modifier: Modifier, width: Int = 300) {
 @Composable
 fun BodyScreen(onCamera: () -> Unit, onGallery: () -> Unit, onFood: () -> Unit) {
     val s = Store.state.collectAsState().value
+    val context = LocalContext.current
+    // photos from before the outline ratio get measured again once, in the background
+    LaunchedEffect(Unit) { withContext(Dispatchers.Default) { Photos.remeasure(context) } }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Title("Badan", "Berat, BMI, gambar dan makan · semua dalam phone")
 
@@ -198,7 +226,7 @@ fun BodyScreen(onCamera: () -> Unit, onGallery: () -> Unit, onFood: () -> Unit) 
 
         val trend = Photos.trend(s.photos)
         Card {
-            Text("Trend bahu : pinggul (depan)", color = SadoColors.Text, fontSize = 19.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+            Text("Trend bahu : pinggang (depan)", color = SadoColors.Text, fontSize = 19.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
             if (trend.size < 2) Text("Perlu sekurang-kurangnya 2 gambar depan yang badan nampak penuh.", color = SadoColors.TextMuted, fontSize = 13.sp)
             else {
                 val change = ((trend.last() / trend.first() - 1) * 100).roundToInt()
@@ -267,9 +295,9 @@ fun CameraScreen(onBack: () -> Unit, onSaved: () -> Unit) {
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                 Feedback.success()
                 scope.launch {
-                    val r = if (angle == 1) null else withContext(Dispatchers.Default) { Photos.ratio(context, f) }
-                    Store.update { it.copy(photos = it.photos + ProgressPhoto(LocalDate.now().toEpochDay(), angle, name, r)) }
-                    Coach.say(if (r == null && angle != 1) Lines.photoPartial else Lines.photoSaved)
+                    val m = if (angle != 0) null else withContext(Dispatchers.Default) { Photos.measure(context, name) }
+                    Store.update { it.copy(photos = it.photos + ProgressPhoto(LocalDate.now().toEpochDay(), angle, name, m?.ratio, m?.shoulderPx, m?.waistPx, ratioKind = 1)) }
+                    Coach.say(if (m == null && angle == 0) Lines.photoPartial else Lines.photoSaved)
                     busy = false
                     onSaved()
                 }
@@ -415,7 +443,7 @@ private fun DeletePhotoDialog(count: Int, onDismiss: () -> Unit, onDelete: () ->
     onDismissRequest = onDismiss,
     containerColor = SadoColors.Surface,
     title = { Text("Padam $count gambar?", color = SadoColors.Text, fontWeight = FontWeight.ExtraBold) },
-    text = { Text("Gambar dibuang terus dari phone dan trend bahu : pinggul dikira semula. Tak boleh undo, kecuali ada dalam backup .sado lama.", color = SadoColors.TextMuted) },
+    text = { Text("Gambar dibuang terus dari phone dan trend bahu : pinggang dikira semula. Tak boleh undo, kecuali ada dalam backup .sado lama.", color = SadoColors.TextMuted) },
     confirmButton = { TextButton(onDismiss) { Text("Batal", color = SadoColors.Accent, fontWeight = FontWeight.ExtraBold) } },
     dismissButton = { TextButton(onDelete) { Text("Padam", color = SadoColors.Danger) } },
 )
@@ -453,10 +481,10 @@ fun PhotoViewerScreen(angle: Int, startFile: String?, onBack: () -> Unit) {
             }
         }
         Column(Modifier.fillMaxWidth().background(SadoColors.Bg).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val first = list.first()
-            if (angle == 0 && first.ratio != null && cur.ratio != null && cur != first) {
+            val first = list.firstOrNull { it.ratioKind == 1 && it.ratio != null } ?: list.first()
+            if (angle == 0 && first.ratioKind == 1 && cur.ratioKind == 1 && first.ratio != null && cur.ratio != null && cur != first) {
                 val change = ((cur.ratio / first.ratio - 1) * 100).roundToInt()
-                Text("Bahu : pinggul " + (if (change >= 0) "+" else "") + "$change% berbanding gambar pertama", color = if (change >= 0) SadoColors.Accent else SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Bahu : pinggang " + (if (change >= 0) "+" else "") + "$change% berbanding gambar pertama", color = if (change >= 0) SadoColors.Accent else SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             }
             DotScrubber(list.size, pager.currentPage) { i -> scope.launch { pager.scrollToPage(i) } }
             Text("Leret gambar, atau tekan dan leret pada titik untuk tengok perubahan laju.", color = SadoColors.TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -515,9 +543,9 @@ fun CompareScreen(a: String, b: String, onBack: () -> Unit) {
                 }
             }
         }
-        if (pa.ratio != null && pb.ratio != null) {
+        if (pa.ratio != null && pb.ratio != null && pa.ratioKind == 1 && pb.ratioKind == 1) {
             val change = ((pb.ratio / pa.ratio - 1) * 100).roundToInt()
-            Text("Bahu : pinggul " + (if (change >= 0) "+" else "") + "$change%", color = if (change >= 0) SadoColors.Accent else SadoColors.Streak, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Bahu : pinggang " + (if (change >= 0) "+" else "") + "$change%", color = if (change >= 0) SadoColors.Accent else SadoColors.Streak, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -528,7 +556,7 @@ internal fun SnapTip(angle: Int, modifier: Modifier = Modifier) {
     val lines = if (angle == 1) listOf("Sisi: berdiri tegak, tangan ke bawah, pandang depan.")
     else listOf(
         "Snap kepala sampai lutut",
-        "Paling kurang bahu sampai tengah peha. Tangan jauh sikit dari badan, phone sama jarak setiap kali.",
+        "Paling kurang bahu sampai tengah peha. Tangan jauh sikit dari pinggang (jangan rapat ke badan), badan rileks, phone sama jarak setiap kali.",
     )
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xCC0E0F12)).padding(horizontal = 14.dp, vertical = 10.dp),

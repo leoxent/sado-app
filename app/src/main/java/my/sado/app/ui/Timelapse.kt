@@ -263,7 +263,7 @@ fun TimelapseBody(angle: Int, photos: List<ProgressPhoto>, start: Long, onDismis
                     Switch(dates, { dates = it }, colors = SwitchDefaults.colors(checkedThumbColor = SadoColors.OnAccent, checkedTrackColor = SadoColors.Accent))
                 }
                 if (angle == 0) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Tunjuk nisbah bahu : pinggul", color = SadoColors.Text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text("Tunjuk nisbah bahu : pinggang", color = SadoColors.Text, fontSize = 14.sp, modifier = Modifier.weight(1f))
                     Switch(ratio, { ratio = it }, colors = SwitchDefaults.colors(checkedThumbColor = SadoColors.OnAccent, checkedTrackColor = SadoColors.Accent))
                 }
                 if (failed) Text("Tak berjaya buat video kat phone ni.", color = SadoColors.Danger, fontSize = 13.sp)
@@ -272,7 +272,7 @@ fun TimelapseBody(angle: Int, photos: List<ProgressPhoto>, start: Long, onDismis
                     val caps = chosen.map { p ->
                         buildList {
                             if (dates) { add("Minggu ${week(p)}"); add(day(p)) }
-                            if (ratio && p.ratio != null) add("Bahu : pinggul ${"%.2f".format(p.ratio)}")
+                            if (ratio && p.ratio != null && p.ratioKind == 1) add("Bahu : pinggang ${"%.2f".format(p.ratio)}")
                         }
                     }
                     scope.launch {

@@ -144,7 +144,6 @@ data class Settings(
     val lastAutoBackupError: String? = null,
     val devMode: Boolean = false,
     val honestRestPerWeek: Int = 2, // "Rehat jujur" days a week that keep the streak
-
     val bodyPath: String? = null, // null = ikut planner/badan, "kurus" or "gempal": which starting character
     val voiceBatch: Boolean = true, // intro names and numbers made in one take and cut apart; off = one request per clip // tap the version 7 times in Settings; tools for building the app itself
 )
@@ -166,7 +165,15 @@ data class WeightLog(val epochDay: Long, val kg: Float)
 data class SleepLog(val epochDay: Long, val hours: Float, val source: String) // source: Jawapan or Health Connect
 
 @Serializable
-data class ProgressPhoto(val epochDay: Long, val angle: Int, val file: String, val ratio: Float? = null) // angle 0 depan, 1 sisi, 2 belakang
+data class ProgressPhoto(
+    val epochDay: Long,
+    val angle: Int, // 0 depan, 1 sisi, 2 belakang
+    val file: String,
+    val ratio: Float? = null, // shoulder:waist from the body outline (ratioKind 1); front photos only
+    val shoulderPx: Float? = null, // the raw widths, so the ratio can be worked out again later
+    val waistPx: Float? = null,
+    val ratioKind: Int = 0, // 0 = the old joint-to-joint shoulder:hip, waiting to be measured again; 1 = outline shoulder:waist
+)
 
 @Serializable
 data class FoodItem(
@@ -218,7 +225,6 @@ data class AppState(
     val loads: Map<String, Float> = emptyMap(), // weighted move id to the extra kg it is done with now
     val deload: Set<String> = emptySet(), // moves failed two sessions running: one set fewer next time
     val honestRests: List<Long> = emptyList(), // "Rehat jujur" days: keep the streak, a few a week
-
     val photos: List<ProgressPhoto> = emptyList(),
     val meals: List<Meal> = emptyList(),
     val myFoods: List<MyFood> = emptyList(),
