@@ -50,3 +50,12 @@ class PlanGroupsTest {
         assertEquals(listOf("front_delts", "side_delts"), a.priority)
     }
 }
+
+class LeanDoseTest {
+    @Test fun leanKeepsStrengthRepBased() {
+        val a = PlannerAnswers(shape = listOf("lean"), level = 1, days = 3, time = 30, intensity = 1)
+        assertEquals("12–15", PlanBuilder.dose(Catalog.get("squat"), a).second)
+        assertEquals("40s work, 20s rest", PlanBuilder.dose(Catalog.get("climber"), a).second)
+        assertEquals("30s", PlanBuilder.dose(Catalog.get("plank"), a).second)
+    }
+}

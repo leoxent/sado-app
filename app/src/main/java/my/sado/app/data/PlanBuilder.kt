@@ -92,10 +92,11 @@ object PlanBuilder {
 
     fun dose(m: Move, a: PlannerAnswers): Triple<Int, String, Int> {
         val sets = listOf(2, 3, 4)[a.intensity]
-        val onlyLean = a.shape == listOf("lean")
         val hyper = a.shape.any { it in hyperShapes }
+        // intervals are for cardio only; on Kurus & tone the strength moves stay rep-based (12â€“15) so they keep the muscle
         return when {
-            onlyLean || m.group == "cardio" -> Triple(3, "40s work, 20s rest", 40)
+            m.group == "cardio" -> Triple(3, "40s work, 20s rest", 40)
+
             m.id == "negative" -> Triple(sets, "5 rep turun slow", 5)
             m.id == "pullup" || m.id == "chinup" -> if (a.pull == 1) Triple(sets, "maximum rep", 5) else Triple(sets, "6–10", 10)
             m.timed -> listOf(20, 30, 45)[a.level].let { Triple(sets, "${it}s", it) }
