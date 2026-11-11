@@ -78,7 +78,11 @@ data class Plan(
 data class PlanSession(val tag: String, val label: String, val exercises: List<PlannedExercise>)
 
 @Serializable
-data class SetLog(val reps: Int, val rir: Int? = null)
+data class SetLog(
+    val reps: Int,
+    val rir: Int? = null,
+    val kg: Float? = null, // extra load on a weighted move
+)
 
 @Serializable
 data class ExerciseLog(val id: String, val sets: List<SetLog> = emptyList(), val skipped: Boolean = false)
@@ -197,6 +201,8 @@ data class AppState(
     val ladders: Map<String, LadderProgress> = emptyMap(),
     val boosts: Map<String, Int> = emptyMap(), // move id to reps (or 5s steps) earned above the bottom of its range
     val extraSets: Map<String, Int> = emptyMap(), // move id to sets the user added (or took off) before a workout
+    val loads: Map<String, Float> = emptyMap(), // weighted move id to the extra kg it is done with now
+
     val photos: List<ProgressPhoto> = emptyList(),
     val meals: List<Meal> = emptyList(),
     val myFoods: List<MyFood> = emptyList(),

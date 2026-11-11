@@ -14,6 +14,7 @@ data class Move(
     val maxPull: Int? = null,
     val wger: String? = null, // exact wger name used to pull description and credit
     val tips: List<String> = emptyList(),
+    val weighted: Boolean = false, // carries extra kg (a loaded backpack, or a dumbbell); progresses by kg at the top of its range
 )
 
 object Catalog {
@@ -38,6 +39,8 @@ object Catalog {
         Move("floorpress", "Dumbbell floor press", "chest", listOf("chest", "triceps"), need = "dumbbell", tips = listOf("Baring, siku sentuh lantai perlahan.", "Tolak dumbbell lurus ke atas dada.", "Jangan hentak siku.")),
         Move("archer", "Archer push-up", "chest", listOf("chest", "triceps"), listOf("delts"), setOf(2), avoid = setOf("shoulder"), tips = listOf("Tangan lebar, turun ke satu sisi.", "Tangan sebelah lagi lurus sebagai bantuan.", "Selang-seli kiri dan kanan.")),
         Move("onearm", "One-arm push-up", "chest", listOf("chest", "triceps"), listOf("abs", "delts"), setOf(2), avoid = setOf("shoulder"), tips = listOf("Kaki lebar untuk imbangan.", "Badan jangan berpusing.", "Start dengan tangan atas bench.")),
+        Move("wpush", "Weighted push-up (backpack)", "chest", listOf("chest", "triceps"), listOf("delts", "abs"), setOf(2), avoid = setOf("shoulder"), weighted = true, tips = listOf("Galas beg berisi, tali ketat supaya beg tak gelongsor.", "Badan lurus, turun sampai dada hampir sentuh lantai.", "Bila rep atas dah senang, tambah isi beg.")),
+        Move("tempopush", "Tempo push-up (3 s turun)", "chest", listOf("chest", "triceps"), listOf("delts", "abs"), setOf(1, 2), avoid = setOf("shoulder"), tips = listOf("Turun perlahan kira 3 saat.", "Tahan sekejap di bawah, jangan rehat atas lantai.", "Tolak naik biasa.")),
         Move("lateral", "Lateral raise", "side_delts", listOf("delts"), listOf("traps"), need = "dumbbell", tips = listOf("Siku sedikit bengkok.", "Angkat sampai paras bahu je.", "Turun perlahan 3 saat.")),
         Move("dbpress", "Dumbbell shoulder press", "front_delts", listOf("delts", "triceps"), listOf("traps"), need = "dumbbell", avoid = setOf("shoulder"), tips = listOf("Duduk tegak, dumbbell paras telinga.", "Tolak lurus ke atas, jangan kunci siku.", "Turun perlahan 2 saat.")),
         Move("bppress", "Backpack overhead press", "front_delts", listOf("delts", "triceps"), listOf("traps"), need = "backpack", avoid = setOf("shoulder"), tips = listOf("Peluk beg depan dada, tali ke atas.", "Tolak beg lurus ke atas kepala.", "Perut kemut, jangan lentik pinggang.")),
@@ -49,6 +52,8 @@ object Catalog {
         Move("pullapart", "Band pull-apart", "rear_delts",
  listOf("delts", "traps"), need = "band", tips = listOf("Tangan lurus depan dada.", "Tarik band sampai sentuh dada.", "Picit belikat.")),
         Move("pullup", "Pull-up", "lats", listOf("lats", "biceps"), listOf("forearms", "abs"), need = "bar", avoid = setOf("shoulder"), minPull = 1, wger = "Pull-ups", tips = listOf("Genggam lebih lebar dari bahu.", "Tarik dada ke bar, jangan hayun badan.", "Turun sampai tangan lurus penuh.")),
+        Move("archerpull", "Archer pull-up", "lats", listOf("lats", "biceps"), listOf("forearms", "abs"), setOf(2), "bar", setOf("shoulder"), minPull = 1, tips = listOf("Genggam lebar, tarik badan ke satu tangan.", "Tangan sebelah lagi lurus sebagai bantuan.", "Selang-seli kiri dan kanan, turun perlahan.")),
+        Move("wpullup", "Weighted pull-up (backpack)", "lats", listOf("lats", "biceps"), listOf("forearms", "abs"), setOf(2), "bar", setOf("shoulder"), minPull = 1, weighted = true, tips = listOf("Galas beg berisi depan atau belakang, tali ketat.", "Tarik dada ke bar tanpa hayun.", "Turun sampai tangan lurus penuh.")),
         Move("negative", "Negative pull-up", "lats", listOf("lats", "biceps"), listOf("forearms"), need = "bar", avoid = setOf("shoulder"), maxPull = 0, tips = listOf("Lompat ke posisi atas, dagu atas bar.", "Turun perlahan 4–5 saat.", "Ulang. Ini jalan pintas ke pull-up pertama.")),
         Move("invrow", "Inverted row", "lats", listOf("lats", "biceps"), listOf("traps", "delts"), need = "chair", tips = listOf("Pastikan meja kukuh dan tak terbalik.", "Badan lurus, tarik dada ke tepi meja.", "Bengkok lutut untuk lebih senang.")),
         Move("dbrow", "Dumbbell row", "lats", listOf("lats", "biceps"), listOf("traps"), need = "dumbbell", avoid = setOf("back"), tips = listOf("Satu tangan dan lutut atas kerusi.", "Tarik dumbbell ke pinggul.", "Belakang rata, jangan pusing badan.")),
@@ -87,6 +92,7 @@ object Catalog {
         Move("stepup", "Dumbbell step-up", "legs", listOf("quads", "glutes"), listOf("hamstrings"), setOf(1, 2), need = "dumbbell", avoid = setOf("knee"), tips = listOf("Guna kerusi atau tangga yang kukuh.", "Naik guna kaki atas, jangan tolak kaki bawah.", "Turun perlahan.")),
         Move("shrimp", "Shrimp squat", "legs", listOf("quads", "glutes"), levels = setOf(2), avoid = setOf("knee"), tips = listOf("Pegang kaki belakang.", "Turun sampai lutut belakang sentuh lantai.", "Pegang dinding untuk balance.")),
         Move("pistol", "Pistol squat", "legs", listOf("quads", "glutes"), listOf("abs"), setOf(2), avoid = setOf("knee"), tips = listOf("Satu kaki lurus ke depan.", "Turun perlahan atas satu kaki.", "Start dengan duduk atas kerusi.")),
+        Move("wpistol", "Weighted pistol squat (backpack)", "legs", listOf("quads", "glutes"), listOf("abs"), setOf(2), avoid = setOf("knee"), weighted = true, tips = listOf("Peluk beg berisi depan dada, ia bantu imbangan.", "Turun perlahan atas satu kaki.", "Bila rep atas dah senang, tambah isi beg.")),
         Move("wallsit", "Wall sit", "legs", listOf("quads"), timed = true, tips = listOf("Belakang rapat ke dinding.", "Lutut 90°.", "Bernafas biasa.")),
         Move("calf", "Calf raise", "legs", listOf("calves"), tips = listOf("Berdiri atas tangga, tumit tergantung.", "Naik penuh, tahan 1 saat.", "Turun perlahan.")),
         Move("slbridge", "Single-leg glute bridge", "glutes", listOf("glutes", "hamstrings"), levels = setOf(1, 2), tips = listOf("Satu kaki di lantai, satu lagi lurus.", "Tolak pinggul ke atas.", "Picit punggung di atas.")),
@@ -113,9 +119,10 @@ object Catalog {
 
     // progression ladders: index = rung
     val ladders = mapOf(
-        "push" to listOf("kneepush", "push", "decline", "archer", "onearm"),
-        "squat" to listOf("squat", "split", "shrimp", "pistol"),
-        "pull" to listOf("invrow", "negative", "pullup"),
+        "push" to listOf("kneepush", "push", "decline", "archer", "onearm", "wpush"),
+        "squat" to listOf("squat", "split", "shrimp", "pistol", "wpistol"),
+        "pull" to listOf("invrow", "negative", "pullup", "archerpull", "wpullup"),
+
     )
 
     // what each piece of home equipment is called

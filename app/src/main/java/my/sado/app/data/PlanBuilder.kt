@@ -32,21 +32,26 @@ object PlanBuilder {
             "bar" -> hasBar
             else -> m.need in a.equip
         }
-        return a.level in m.levels && needOk &&
+        return a.level in m.levels && needOk && loadOk(m, a) &&
             (m.minPull == null || a.pull >= m.minPull) &&
             (m.maxPull == null || (a.pull >= 0 && a.pull <= m.maxPull)) &&
             m.avoid.none { it in a.injury }
     }
 
-    // swap a ladder move for the rung the user has actually reached, if that rung is usable
+    /** A weighted move needs something to carry: a backpack to load, or a dumbbell. */
+    fun loadOk(m: Move, a: PlannerAnswers) = !m.weighted || a.equip.any { it == "backpack" || it == "dumbbell" }
+
+    // swap a ladder move for the rung the user has actually reached; a rung the gear or an injury rules out
+    // falls back to the highest usable rung below it, so passing an unusable top rung never sends the user back to the start
     fun progressed(id: String, a: PlannerAnswers, ladders: Map<String, LadderProgress>): String {
         val key = Catalog.ladderOf(id) ?: return id
         val rung = ladders[key]?.rung ?: return id
-        val target = Catalog.ladders.getValue(key).getOrNull(rung) ?: return id
-        val m = Catalog.get(target)
-        val ok = (m.need == null || m.need == "bar" && a.pull >= 0 || m.need in a.equip) && m.avoid.none { it in a.injury }
-        return if (ok) target else id
+        val rungs = Catalog.ladders.getValue(key)
+        return (rung.coerceAtMost(rungs.lastIndex) downTo 0).map { rungs[it] }.firstOrNull { fits(Catalog.get(it), a) } ?: id
     }
+
+    /** Whether a move can be done with the user's gear and injuries; the ladder climbs only onto usable rungs. */
+    fun usable(id: String, a: PlannerAnswers?) = a == null || fits(Catalog.get(id), a)
 
     // the saved plan was built once; swap in the rung each ladder has reached since, with that move's own dose
     fun refresh(exercises: List<PlannedExercise>, a: PlannerAnswers, ladders: Map<String, LadderProgress>): List<PlannedExercise> =
@@ -63,7 +68,7 @@ object PlanBuilder {
         a.copy(equip = gear - "bar", pull = if ("bar" in gear) maxOf(a.pull, 0) else -1)
 
     private fun fits(m: Move, a: PlannerAnswers) =
-        (m.need == null || (m.need == "bar" && a.pull >= 0) || m.need in a.equip) && m.avoid.none { it in a.injury }
+        (m.need == null || (m.need == "bar" && a.pull >= 0) || m.need in a.equip) && loadOk(m, a) && m.avoid.none { it in a.injury }
 
     /**
      * A session redone for the gear at hand: a move that needs something missing becomes the closest move that fits,
@@ -93,12 +98,15 @@ object PlanBuilder {
     fun dose(m: Move, a: PlannerAnswers): Triple<Int, String, Int> {
         val sets = listOf(2, 3, 4)[a.intensity]
         val hyper = a.shape.any { it in hyperShapes }
-        // intervals are for cardio only; on Kurus & tone the strength moves stay rep-based (12â€“15) so they keep the muscle
+        // intervals are for cardio only; on Kurus & tone the strength moves stay rep-based (12–15) so they keep the muscle
         return when {
             m.group == "cardio" -> Triple(3, "40s work, 20s rest", 40)
 
             m.id == "negative" -> Triple(sets, "5 rep turun slow", 5)
             m.id == "pullup" || m.id == "chinup" -> if (a.pull == 1) Triple(sets, "maximum rep", 5) else Triple(sets, "6–10", 10)
+            m.id == "archerpull" -> Triple(sets, "3–6", 6)
+            m.weighted -> Triple(sets, "5–8", 8)
+
             m.timed -> listOf(20, 30, 45)[a.level].let { Triple(sets, "${it}s", it) }
             hyper && a.shape.filter { it in hyperShapes } == listOf("bulk") -> Triple(sets, "6–10", 10)
             hyper -> if (a.level == 0) Triple(sets, "8–10", 10) else Triple(sets, "8–12", 12)

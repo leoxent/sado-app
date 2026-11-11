@@ -353,6 +353,8 @@ object Progress {
     // top of its range; anything else keeps going to half again (reps) or double (seconds, at most 2 minutes)
     fun top(id: String, d: Dose): Int = when {
         d.timed -> maxOf(d.lo, minOf(d.lo * 2, 120))
+        Catalog.moves.firstOrNull { it.id == id }?.weighted == true -> d.hi // past the top of its range a weighted move adds kg, not reps
+
         climbs(id) && d.hi > d.lo -> d.hi
         else -> d.hi + d.hi / 2
     }
@@ -375,35 +377,55 @@ object Progress {
     // the effort answer after a move's last set: Sangat easy = 4, Easy = 3, Ngam = 1, Susah = 0 reps in reserve
     fun stepFor(effort: Int) = when { effort >= 4 -> 2; effort >= 3 -> 1; effort >= 1 -> 0; else -> -1 }
 
-    data class Climb(val ladders: Map<String, LadderProgress>, val boosts: Map<String, Int>)
+    data class Climb(val ladders: Map<String, LadderProgress>, val boosts: Map<String, Int>, val loads: Map<String, Float> = emptyMap())
+
+    const val START_KG = 2.5f // a weighted move starts with about two full water bottles in the bag
+    const val KG_STEP = 2.5f
+
+    fun load(loads: Map<String, Float>, id: String) = loads[id] ?: START_KG
 
     // After a session, for each move done in full: Sangat easy adds 2 reps (or 5s steps), Easy 1, Ngam keeps it, Susah takes 1 off.
-    // A ladder move at the top of its range answered Easy or better goes up a rung, and the new move starts at the bottom.
-    // Moves with no number to climb (max reps, negatives, the user's own workouts) climb the ladder on Easy or better.
-    fun climb(ladders: Map<String, LadderProgress>, boosts: Map<String, Int>, plan: List<PlannedExercise>, logs: List<ExerciseLog>): Climb {
+    // A ladder move at the top of its range answered Easy or better goes up a rung, and the new move starts at the bottom;
+    // a rung the gear rules out ([usable]) is not climbed onto. A weighted move at the top of its range adds KG_STEP and
+    // starts again at the bottom. Moves with no number to climb (max reps, negatives, the user's own workouts) climb the ladder on Easy or better.
+    fun climb(
+        ladders: Map<String, LadderProgress>, boosts: Map<String, Int>, plan: List<PlannedExercise>, logs: List<ExerciseLog>,
+        loads: Map<String, Float> = emptyMap(), usable: (String) -> Boolean = { true },
+    ): Climb {
         val outL = ladders.toMutableMap()
         val outB = boosts.toMutableMap()
+        val outK = loads.toMutableMap()
         for (log in logs) {
             val p = plan.firstOrNull { it.id == log.id } ?: continue
             val effort = log.sets.lastOrNull()?.rir ?: continue
             if (log.skipped || log.sets.size < p.sets) continue
             val key = Catalog.ladderOf(log.id)
             val prog = key?.let { outL[it] } ?: LadderProgress()
-            val onRung = key != null && Catalog.ladders.getValue(key).getOrNull(prog.rung) == log.id
-            val canClimb = onRung && prog.rung < Catalog.ladders.getValue(key!!).lastIndex
+            val rungs = key?.let { Catalog.ladders.getValue(it) }
+            val onRung = rungs != null && rungs.getOrNull(prog.rung) == log.id
+            val canClimb = onRung && prog.rung < rungs!!.lastIndex && usable(rungs[prog.rung + 1])
+            val weighted = Catalog.moves.firstOrNull { it.id == log.id }?.weighted == true
             val d = p.base?.let(::dose)
             val now = outB[log.id] ?: 0
+            // what was carried today is the load from now on, whatever the user changed it to in the session
+            if (weighted) log.sets.mapNotNull { it.kg }.maxOrNull()?.let { outK[log.id] = it }
             when {
                 d == null -> if (effort >= 3 && canClimb) outL[key!!] = LadderProgress(prog.rung + 1)
                 now >= stepRange(log.id, d).last && effort >= 3 && canClimb -> {
                     outL[key!!] = LadderProgress(prog.rung + 1)
-                    outB.remove(Catalog.ladders.getValue(key)[prog.rung + 1])
+                    outB.remove(rungs!![prog.rung + 1])
+                }
+                weighted && now >= stepRange(log.id, d).last && effort >= 3 -> {
+                    outK[log.id] = load(outK, log.id) + KG_STEP
+                    outB.remove(log.id)
                 }
                 else -> (now + stepFor(effort)).coerceIn(stepRange(log.id, d)).let { if (it == 0) outB.remove(log.id) else outB[log.id] = it }
             }
         }
-        return Climb(outL, outB)
+
+        return Climb(outL, outB, outK)
     }
+
 
     // MET values approximate the Compendium of Physical Activities; legs flags sports that load the legs hard
     data class Sport(val name: String, val met: Double, val legs: Boolean)

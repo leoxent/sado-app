@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -132,6 +133,8 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
 
     val cur = plan[idx]
     val move = Catalog.get(cur.id)
+    // the extra kg for a weighted move; changing it here carries to the next session
+    var kg by rememberSaveable(idx) { mutableFloatStateOf(Progress.load(Store.state.value.loads, cur.id)) }
     LaunchedEffect(idx, phase) {
         // don't repeat the line when coming back from Info
         val key = "$idx-$phase-${sets.size}"
@@ -152,7 +155,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
         val hr = HeartRate.stopRecording()
         val bonus = Progress.comebackBonus(Store.state.value, xp)
         Store.update { s ->
-            val c = Progress.climb(s.ladders, s.boosts, plan, all)
+            val c = Progress.climb(s.ladders, s.boosts, plan, all, s.loads) { PlanBuilder.usable(it, s.answers) }
             // back from a break: XP counts double until the best reached before
             s.copy(
                 xp = s.xp + xp + bonus,
@@ -160,6 +163,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 logs = s.logs + WorkoutLog(LocalDate.now().toEpochDay(), title, minutes, all, xp + bonus, quit, hr?.first, hr?.second, bonus),
                 ladders = c.ladders,
                 boosts = c.boosts,
+                loads = c.loads,
                 gearToday = null, // the next workout starts from the quiz's gear again
                 plan = s.plan?.let { p -> s.answers?.let { a -> p.mapExercises { PlanBuilder.refresh(it, a, c.ladders) } } } ?: s.plan,
             )
@@ -203,6 +207,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                     if (move.timed) TimedSet(cur.target) { secs -> reps = secs }
                     else TargetCard(cur.reps, if (camOn) reps else null)
                 }
+                if (move.weighted) LoadPicker(kg) { kg = it }
                 // set pips: done sets fill lime, the current one is outlined
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
                     repeat(cur.sets) { i ->
@@ -217,7 +222,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 if (toast != null) Text(toast!!, color = SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 // no rep tapping: one press per set, reps count as the target unless the camera or timer measured them
                 PrimaryButton(if (sets.size + 1 >= cur.sets) "Set done · last set" else "Set done") {
-                    sets += SetLog(if (reps > 0) reps else cur.target)
+                    sets += SetLog(if (reps > 0) reps else cur.target, kg = kg.takeIf { move.weighted })
                     reps = 0
                     toast = null
                     Feedback.success()
@@ -290,8 +295,25 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
     )
 }
 
+// the load on a weighted move, in KG_STEP steps; a backpack is loaded with books or water bottles (1 litre = 1 kg)
+@Composable
+private fun LoadPicker(kg: Float, onChange: (Float) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Beban tambahan: +${"%.1f".format(kg)} kg", color = SadoColors.Text, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Isi beg: 1 botol air 1.5 L ≈ 1.5 kg", color = SadoColors.TextMuted, fontSize = 12.sp)
+        }
+        SecondaryButton("−", Modifier.size(width = 56.dp, height = 48.dp)) { onChange((kg - Progress.KG_STEP).coerceAtLeast(0f)) }
+        SecondaryButton("+", Modifier.size(width = 56.dp, height = 48.dp)) { onChange(kg + Progress.KG_STEP) }
+    }
+}
+
 @Composable
 private fun TargetCard(target: String, camReps: Int?) {
+
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(SadoColors.Accent.copy(alpha = 0.10f)).border(2.dp, SadoColors.Accent.copy(alpha = 0.4f), RoundedCornerShape(28.dp)).padding(vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
