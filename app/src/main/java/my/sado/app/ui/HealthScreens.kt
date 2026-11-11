@@ -250,15 +250,39 @@ private fun HeartRateCard() {
     val status = HeartRate.status.collectAsState().value
     val found = HeartRate.found.collectAsState().value
     val bpm = HeartRate.bpm.collectAsState().value
-    var note by remember { mutableStateOf<String?>(null) }
-    val askBle = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
-        if (res.values.all { it }) HeartRate.scan(context) else note = "Perlukan kebenaran Bluetooth untuk cari jam."
+    val problem = HeartRate.problem.collectAsState().value
+    var manual by remember { mutableStateOf(false) }
+    var then by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun save(d: HeartRate.Found) {
+        Store.update { it.copy(settings = it.settings.copy(hrDevice = d.address, hrDeviceName = d.name)) }
+        HeartRate.connect(context, d.address)
+        Feedback.tap()
     }
+    // the system picker's answer: the watch chosen, saved, then connected
+    val pickResult = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == android.app.Activity.RESULT_OK) HeartRate.picked(r.data)?.let { save(it) }
+    }
+    // permission first; the step that needed it runs once it is granted
+    val askBle = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
+        if (res.values.all { it }) then?.invoke() else HeartRate.denied()
+        then = null
+    }
+    fun withPermission(step: () -> Unit) {
+        if (HeartRate.hasPermissions(context)) step() else { then = step; askBle.launch(HeartRate.permissions) }
+    }
+    fun pick() = withPermission {
+        HeartRate.pick(context, launch = { sender -> pickResult.launch(androidx.activity.result.IntentSenderRequest.Builder(sender).build()) }) {
+            manual = true
+            HeartRate.scan(context)
+        }
+    }
+    // a watch picked before reconnects when this opens, so the pick is a one-time thing
+    LaunchedEffect(Unit) { HeartRate.reconnectSaved(context, s.settings.hrDevice) }
     DisposableEffect(Unit) { onDispose { HeartRate.stopScan(context) } }
 
     Card {
         Text(
-            "Di jam Garmin: buka menu kawalan (tahan butang LIGHT) atau Setting → Sensor → Wrist Heart Rate → Broadcast Heart Rate. Lepas tu tekan Cari jam.",
+            "Di jam Garmin: buka menu kawalan (tahan butang LIGHT) atau Setting → Sensor → Wrist Heart Rate → Broadcast Heart Rate. Lepas tu tekan Pilih jam.",
             color = SadoColors.TextMuted, fontSize = 13.sp,
         )
         if (s.settings.hrDevice != null) {
@@ -269,17 +293,16 @@ private fun HeartRateCard() {
                         when (status) {
                             HeartRate.Status.Connected -> "Bersambung"
                             HeartRate.Status.Connecting -> "Menyambung…"
-                            else -> "Auto connect bila workout"
+                            else -> "Auto sambung bila buka app atau workout"
                         },
-                        color = SadoColors.TextMuted, fontSize = 13.sp,
+                        color = if (status == HeartRate.Status.Connected) SadoColors.Accent else SadoColors.TextMuted, fontSize = 13.sp,
                     )
                 }
                 if (bpm != null) LiveHr()
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecondaryButton("Uji sambungan", Modifier.weight(1f), color = SadoColors.Accent) {
-                    if (!HeartRate.bluetoothOn(context)) note = "Hidupkan Bluetooth dulu."
-                    else if (HeartRate.hasPermissions(context)) HeartRate.connect(context, s.settings.hrDevice) else askBle.launch(HeartRate.permissions)
+                SecondaryButton("Sambung semula", Modifier.weight(1f), color = SadoColors.Accent) {
+                    withPermission { HeartRate.connect(context, s.settings.hrDevice) }
                 }
                 SecondaryButton("Lupakan", Modifier.weight(1f)) {
                     HeartRate.disconnect()
@@ -287,28 +310,30 @@ private fun HeartRateCard() {
                 }
             }
         }
-        PrimaryButton(if (status == HeartRate.Status.Scanning) "Mencari…" else "Cari jam", enabled = status != HeartRate.Status.Scanning) {
-            note = null
-            when {
-                !HeartRate.bluetoothOn(context) -> note = "Hidupkan Bluetooth dulu."
-                HeartRate.hasPermissions(context) -> HeartRate.scan(context)
-                else -> askBle.launch(HeartRate.permissions)
-            }
-        }
-        found.forEach { d ->
+        PrimaryButton(if (s.settings.hrDevice == null) "Pilih jam" else "Tukar jam", enabled = status != HeartRate.Status.Scanning) { pick() }
+        Text(
+            if (status == HeartRate.Status.Scanning) "Mencari…" else "Tak jumpa dalam senarai? Cari manual",
+            color = SadoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.fillMaxWidth().clickable { manual = true; withPermission { HeartRate.scan(context) } }.padding(vertical = 6.dp),
+        )
+        if (manual) found.forEach { d ->
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SadoColors.Surface2).clickable {
-                    Store.update { it.copy(settings = it.settings.copy(hrDevice = d.address, hrDeviceName = d.name)) }
-                    HeartRate.connect(context, d.address)
-                    Feedback.tap()
-                }.padding(12.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SadoColors.Surface2).clickable { save(d) }.padding(12.dp),
             ) {
                 Text(d.name, color = SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
                 Text("Pilih", color = SadoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             }
         }
-        if (status == HeartRate.Status.Idle && found.isEmpty() && note == null && s.settings.hrDevice == null)
-            Text("Tiada jam dijumpai lagi. Pastikan Broadcast Heart Rate aktif.", color = SadoColors.TextMuted, fontSize = 13.sp)
-        note?.let { Text(it, color = SadoColors.Streak, fontSize = 13.sp) }
+        problem?.let { p ->
+            Text(p.text, color = SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            if (p == HeartRate.Problem.BluetoothOff) SecondaryButton("Buka setting Bluetooth", Modifier.fillMaxWidth()) {
+                runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            }
+            if (p == HeartRate.Problem.NoPermission) SecondaryButton("Buka kebenaran app", Modifier.fillMaxWidth()) {
+                runCatching {
+                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null)))
+                }
+            }
+        }
     }
 }

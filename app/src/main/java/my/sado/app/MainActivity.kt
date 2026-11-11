@@ -157,6 +157,8 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         if (!unlocked) authenticate()
+        // the watch picked once reconnects by itself whenever the app comes back
+        HeartRate.reconnectSaved(this, Store.state.value.settings.hrDevice)
     }
 
     override fun onStop() {
