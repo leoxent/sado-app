@@ -57,16 +57,20 @@ private val dayNames = listOf("Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sa
 
 // the planner's muscle groups and what each covers, for the last question
 private val groupOptions = listOf(
-    "chest" to "Dada", "delts" to "Bahu", "lats" to "Belakang", "arms" to "Lengan",
-    "abs" to "Perut", "legs" to "Kaki", "glutes" to "Punggung",
+    "chest" to "Dada", "side_delts" to "Bahu sisi", "front_delts" to "Bahu depan", "rear_delts" to "Bahu belakang", "lats" to "Belakang",
+    "traps" to "Trapezius", "arms" to "Lengan", "abs" to "Perut", "legs" to "Kaki", "glutes" to "Punggung", "lower_back" to "Pinggang",
 )
 private val groupDetail = mapOf(
-    "chest" to "Pectoral", "delts" to "Deltoid, bagi bahu nampak lebar", "lats" to "Lats dan trapezius, rahsia V-shape",
+    "chest" to "Pectoral", "side_delts" to "Delt sisi, yang buat bahu nampak lebar", "front_delts" to "Delt depan, dah banyak kena masa push-up",
+    "rear_delts" to "Delt belakang, bahu bulat dan postur", "lats" to "Lats, rahsia V-shape", "traps" to "Atas belakang dan leher",
+    "lower_back" to "Otot pinggang belakang",
     "arms" to "Bisep, trisep dan lengan bawah", "abs" to "Six-pack dan sisi perut", "legs" to "Peha depan, peha belakang dan betis",
     "glutes" to "Glutes",
 )
 private val groupMuscleIds = mapOf(
-    "chest" to setOf("chest"), "delts" to setOf("delts"), "lats" to setOf("lats"), "arms" to setOf("biceps", "triceps", "forearms"),
+    "chest" to setOf("chest"), "side_delts" to setOf("delts"), "front_delts" to setOf("delts"), "rear_delts" to setOf("delts"),
+    "lats" to setOf("lats"), "traps" to setOf("traps"), "lower_back" to setOf("lowerback"), "arms" to setOf("biceps", "triceps", "forearms"),
+
     "abs" to setOf("abs", "obliques"), "legs" to setOf("quads", "hamstrings", "calves"), "glutes" to setOf("glutes"),
 )
 

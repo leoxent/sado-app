@@ -48,7 +48,9 @@ import my.sado.app.data.MyTemplate
 import my.sado.app.data.Store
 
 private val groupNames = listOf(
-    "chest" to "Dada", "delts" to "Bahu", "lats" to "Belakang", "arms" to "Lengan",
+    "chest" to "Dada", "side_delts" to "Bahu sisi", "front_delts" to "Bahu depan", "rear_delts" to "Bahu belakang", "lats" to "Belakang",
+    "traps" to "Trapezius", "lower_back" to "Pinggang", "arms" to "Lengan",
+
     "abs" to "Perut", "legs" to "Kaki", "glutes" to "Punggung", "cardio" to "Cardio",
 )
 

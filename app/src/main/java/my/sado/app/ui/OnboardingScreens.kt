@@ -146,7 +146,9 @@ private val questions = listOf(
         Triple("shredded", "Shredded", "Otot tajam, lemak rendah, urat nampak"),
         Triple("lean", "Kurus & tone", "Buang lemak dulu, otot nampak kemas")), multi = true, max = 3),
     Q("priority", "Rate setiap bahagian badan", "5 = paling nak tonjol, 3 = biasa, 1 = sikit je. Bentuk badan impian tadi tailor lagi di atas rating ni.", listOf(
-        Triple("chest", "Dada", "Pectoral"), Triple("delts", "Bahu", "Deltoid, bagi nampak lebar"), Triple("lats", "Belakang", "Lats, rahsia V-shape"),
+        Triple("chest", "Dada", "Pectoral"), Triple("side_delts", "Bahu sisi", "Delt sisi, bagi bahu nampak lebar"), Triple("front_delts", "Bahu depan", "Delt depan"),
+        Triple("rear_delts", "Bahu belakang", "Delt belakang, postur"), Triple("lats", "Belakang", "Lats, rahsia V-shape"),
+
         Triple("arms", "Lengan", "Bisep dan trisep"), Triple("abs", "Perut", "Six-pack dan pinggang"), Triple("legs", "Kaki", "Peha dan betis"),
         Triple("glutes", "Punggung", "Glutes")), multi = true, required = false, rating = true),
     Q("body", "Badan kau sekarang macam mana?", "Tiada jawapan salah.", listOf(

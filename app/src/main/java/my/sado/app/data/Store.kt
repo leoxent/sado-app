@@ -36,7 +36,8 @@ object Store {
     private fun migrate(state: AppState): AppState {
         // 5 → 15 levels: old Kurus/Berisi/Fit/Sado/Beast map to tier I of the same body
         val s0 = if (state.levelFloor >= 0) state else state.copy(levelFloor = Progress.oldLevel(state) * 3)
-        val s = Pets.migrate(s0.copy(peakXp = maxOf(s0.peakXp, s0.xp)))
+        val s = Pets.migrate(s0.copy(peakXp = maxOf(s0.peakXp, s0.xp), answers = s0.answers?.let(::splitDelts)))
+
         val p = s.plan ?: return s
         val reps = mapOf("maks rep" to "maximum rep", "max rep" to "maximum rep", "5 turun perlahan" to "5 rep turun slow", "40s kerja, 20s rehat" to "40s work, 20s rest")
         return s.copy(plan = p.copy(
@@ -48,7 +49,18 @@ object Store {
         ))
     }
 
+    // v0.43 split the planner's one "delts" group into front, side and rear: each keeps the rating the old one had
+    internal fun splitDelts(a: PlannerAnswers): PlannerAnswers {
+        val parts = listOf("front_delts", "side_delts", "rear_delts")
+        val r = a.ratings["delts"]
+        return a.copy(
+            ratings = if (r == null) a.ratings else a.ratings - "delts" + parts.filter { it !in a.ratings }.associateWith { r },
+            priority = if ("delts" in a.priority) (a.priority - "delts" + listOf("front_delts", "side_delts")).distinct() else a.priority,
+        )
+    }
+
     fun update(change: (AppState) -> AppState) {
+
         val next = Pets.settle(change(_state.value)) // a deleted log takes its EXP back
         _state.value = next
         val tmp = File(file.parentFile, file.name + ".tmp")

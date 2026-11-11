@@ -8,19 +8,20 @@ object PlanBuilder {
         "vshape" to "V-shape", "aesthetic" to "Aesthetic", "bulk" to "Besar & kuat", "athletic" to "Atletik", "lean" to "Kurus & tone", "shredded" to "Shredded",
     )
     val groupNames = mapOf(
-        "chest" to "Dada", "delts" to "Bahu", "rear_delts" to "Bahu belakang", "lats" to "Belakang", "traps" to "Trapezius",
+        "chest" to "Dada", "front_delts" to "Bahu depan", "side_delts" to "Bahu sisi", "rear_delts" to "Bahu belakang", "lats" to "Belakang", "traps" to "Trapezius",
         "lower_back" to "Pinggang", "arms" to "Lengan", "abs" to "Perut", "legs" to "Kaki", "glutes" to "Punggung", "cardio" to "Kardio",
     )
     // small helpers, not what a shape is built from: without a rating or a shape asking for them they get only a little weight
-    private val baseWeight = mapOf("rear_delts" to 3.0, "traps" to 1.5, "lower_back" to 1.5)
+    private val baseWeight = mapOf("front_delts" to 3.0, "rear_delts" to 3.0, "traps" to 1.5, "lower_back" to 1.5)
     private val profiles = mapOf(
-        "vshape" to mapOf("lats" to 35.0, "delts" to 30.0, "abs" to 15.0, "legs" to 10.0, "chest" to 10.0),
-        "aesthetic" to mapOf("chest" to 18.0, "delts" to 18.0, "abs" to 18.0, "lats" to 16.0, "arms" to 14.0, "legs" to 10.0, "glutes" to 6.0),
-        "bulk" to mapOf("legs" to 24.0, "chest" to 22.0, "lats" to 20.0, "arms" to 14.0, "delts" to 12.0, "glutes" to 8.0),
+        // side delts are what make the shoulders wider; front delts already get plenty from every press and push-up
+        "vshape" to mapOf("lats" to 35.0, "side_delts" to 25.0, "rear_delts" to 5.0, "front_delts" to 3.0, "abs" to 15.0, "legs" to 10.0, "chest" to 10.0),
+        "aesthetic" to mapOf("chest" to 18.0, "side_delts" to 11.0, "front_delts" to 4.0, "rear_delts" to 3.0, "abs" to 18.0, "lats" to 16.0, "arms" to 14.0, "legs" to 10.0, "glutes" to 6.0),
+        "bulk" to mapOf("legs" to 24.0, "chest" to 22.0, "lats" to 20.0, "arms" to 14.0, "front_delts" to 6.0, "side_delts" to 6.0, "glutes" to 8.0),
         "athletic" to mapOf("legs" to 24.0, "cardio" to 24.0, "abs" to 18.0, "chest" to 12.0, "lats" to 12.0, "glutes" to 10.0),
         "lean" to mapOf("cardio" to 36.0, "legs" to 20.0, "abs" to 18.0, "chest" to 13.0, "lats" to 13.0),
         // muscle that shows: hypertrophy everywhere, abs and arms a little more, some cardio to stay lean
-        "shredded" to mapOf("abs" to 18.0, "chest" to 15.0, "delts" to 15.0, "lats" to 15.0, "arms" to 14.0, "legs" to 12.0, "cardio" to 11.0),
+        "shredded" to mapOf("abs" to 18.0, "chest" to 15.0, "side_delts" to 9.0, "front_delts" to 3.0, "rear_delts" to 3.0, "lats" to 15.0, "arms" to 14.0, "legs" to 12.0, "cardio" to 11.0),
     )
     private val hyperShapes = setOf("vshape", "aesthetic", "bulk", "shredded")
 
@@ -106,11 +107,12 @@ object PlanBuilder {
 
     // muscle groups each day type trains; a tag not listed works the whole body
     private val tagGroups = mapOf(
-        "Pull" to listOf("lats", "delts", "rear_delts", "arms", "abs", "traps"),
-        "Push" to listOf("chest", "delts", "arms", "abs"),
-        "Legs+Push" to listOf("legs", "glutes", "chest", "delts"),
+        "Pull" to listOf("lats", "rear_delts", "side_delts", "arms", "abs", "traps"),
+        "Push" to listOf("chest", "front_delts", "side_delts", "arms", "abs"),
+        "Legs+Push" to listOf("legs", "glutes", "chest", "front_delts", "side_delts"),
         "Legs+Core" to listOf("legs", "glutes", "abs", "lower_back", "cardio"),
-        "Upper" to listOf("chest", "delts", "lats", "rear_delts", "arms", "abs", "traps"),
+        "Upper" to listOf("chest", "side_delts", "front_delts", "lats", "rear_delts", "arms", "abs", "traps"),
+
         "Lower" to listOf("legs", "glutes", "abs", "lower_back", "cardio"),
         "Power" to listOf("legs", "glutes", "chest", "lats", "abs"),
     )
