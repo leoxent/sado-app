@@ -86,7 +86,14 @@ object Health {
         return if (d.isZero) null else d.toMinutes() / 60f
     }
 
+    /** Active calories the watch or phone logged between two moments (a workout's start and end), or null. */
+    suspend fun activeKcal(context: Context, startMs: Long, endMs: Long): Int? = runCatching {
+        if (!available(context) || endMs <= startMs) return null
+        client(context).aggregate(AggregateRequest(setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL), TimeRangeFilter.between(Instant.ofEpochMilli(startMs), Instant.ofEpochMilli(endMs))))[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]
+    }.getOrNull()?.inKilocalories?.toInt()?.takeIf { it > 0 }
+
     suspend fun sessions(context: Context, days: Long = 7): List<HcSession> {
+
         if (!available(context)) return emptyList()
         val c = client(context)
         val range = TimeRangeFilter.between(startOf(LocalDate.now().minusDays(days)), Instant.now())

@@ -252,7 +252,8 @@ object Progress {
     // Mon–Sun week has at least MIN_PER_WEEK active days; the week in progress can never break it,
     // and neither can the very first (partial) week.
     fun streak(s: AppState, today: LocalDate = LocalDate.now()): StreakInfo {
-        val active = activeDays(s)
+        // an honest rest day ("Rehat jujur") counts like a workout day, a few a week
+        val active = activeDays(s) + HonestRest.counted(s)
         val monday = today.minusDays(today.dayOfWeek.value - 1L)
         val thisWeek = active.count { it in monday.toEpochDay()..today.toEpochDay() }
         val first = active.minOrNull() ?: return StreakInfo(0, thisWeek)
@@ -314,7 +315,7 @@ object Progress {
         s.logs.filter { it.epochDay >= monday }.forEach { log ->
             log.exercises.filter { !it.skipped }.forEach { e ->
                 val m = Catalog.moves.firstOrNull { it.id == e.id } ?: return@forEach
-                muscleGroups.forEach { (g, ids) -> if (m.muscles.any { it in ids }) out[g] = out.getValue(g) + e.sets.size }
+                muscleGroups.forEach { (g, ids) -> if (m.muscles.any { it in ids }) out[g] = out.getValue(g) + Integrity.real(e).size }
             }
         }
         return out
@@ -327,9 +328,10 @@ object Progress {
 
     // best single set per exercise across all sessions
     fun records(s: AppState): List<Pair<Move, Int>> =
-        s.logs.flatMap { it.exercises }.filter { it.sets.isNotEmpty() }
+        s.logs.flatMap { it.exercises }.filter { Integrity.real(it).isNotEmpty() }
             .groupBy { it.id }
-            .mapNotNull { (id, logs) -> Catalog.moves.firstOrNull { it.id == id }?.let { m -> m to logs.maxOf { l -> l.sets.maxOf { it.reps } } } }
+            .mapNotNull { (id, logs) -> Catalog.moves.firstOrNull { it.id == id }?.let { m -> m to logs.maxOf { l -> Integrity.real(l).maxOf { it.reps } } } }
+
             .sortedByDescending { it.second }
 
     // Double progression. A dose label is a rep range "8–12", a fixed count "15" or seconds "40s";
@@ -390,15 +392,22 @@ object Progress {
     // starts again at the bottom. Moves with no number to climb (max reps, negatives, the user's own workouts) climb the ladder on Easy or better.
     fun climb(
         ladders: Map<String, LadderProgress>, boosts: Map<String, Int>, plan: List<PlannedExercise>, logs: List<ExerciseLog>,
-        loads: Map<String, Float> = emptyMap(), usable: (String) -> Boolean = { true },
+        loads: Map<String, Float> = emptyMap(), usable: (String) -> Boolean = { true }, history: List<WorkoutLog> = emptyList(),
     ): Climb {
         val outL = ladders.toMutableMap()
         val outB = boosts.toMutableMap()
         val outK = loads.toMutableMap()
         for (log in logs) {
             val p = plan.firstOrNull { it.id == log.id } ?: continue
-            val effort = log.sets.lastOrNull()?.rir ?: continue
-            if (log.skipped || log.sets.size < p.sets) continue
+            // sets flagged as too quick never count: a short real session moves nothing
+            val sets = Integrity.real(log)
+            if (log.skipped || sets.size < p.sets) continue
+            // a "Tak larat" set is 0 reps in reserve; no RIR at all falls back to two sessions at the top of the range
+            val effort = when {
+                sets.any { it.failed } -> 0
+                else -> sets.lastOrNull()?.rir ?: fallbackEffort(log.id, p, sets, history) ?: continue
+            }
+
             val key = Catalog.ladderOf(log.id)
             val prog = key?.let { outL[it] } ?: LadderProgress()
             val rungs = key?.let { Catalog.ladders.getValue(it) }
@@ -424,6 +433,19 @@ object Progress {
         }
 
         return Climb(outL, outB, outK)
+    }
+
+    /**
+     * No effort answer: every set at the top of the rep range, this session and the last one that had the move (also
+     * without an answer), counts as Easy. Anything else gives null and the move stays where it is.
+     */
+    private fun fallbackEffort(id: String, p: PlannedExercise, sets: List<SetLog>, history: List<WorkoutLog>): Int? {
+        val d = (p.base ?: p.reps).let(::dose)?.takeIf { !it.timed } ?: return null
+        fun atTop(s: List<SetLog>) = s.size >= p.sets && s.all { it.reps >= d.hi && it.rir == null && !it.failed }
+        if (!atTop(sets)) return null
+        val before = history.lastOrNull { l -> !l.mini && l.exercises.any { it.id == id && !it.skipped && it.sets.isNotEmpty() } }
+            ?.exercises?.first { it.id == id && !it.skipped && it.sets.isNotEmpty() } ?: return null
+        return if (atTop(Integrity.real(before))) 3 else null
     }
 
 

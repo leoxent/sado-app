@@ -253,6 +253,7 @@ private fun SadoNav(nav: NavHostController, start: String) {
                 onJourney = { nav.navigate("journey") }, onSport = { nav.navigate("sport") }, onTest = { nav.navigate("test") },
                 onHealth = { nav.navigate("health") }, onSettings = { nav.navigate("settings") }, onPet = { nav.navigate("pet") },
                 onRest = { nav.navigate("rest") }, onHealthCheck = { nav.navigate("healthcheck") }, onPetEvolve = { nav.navigate("pet-evolve") },
+                onMini = { nav.navigate("session/mini:plan") },
             )
         }
         composable("pet") { my.sado.app.ui.PetScreen(onEvolve = { nav.navigate("pet-evolve") }, onBack = { nav.popBackStack() }) }
@@ -305,9 +306,11 @@ private fun SadoNav(nav: NavHostController, start: String) {
                 onExercise = { id -> nav.navigate("exercise/$id") },
                 onFinished = { nav.navigate("done") { popUpTo("home") } },
                 onExit = { nav.popBackStack() },
+                onMini = { nav.navigate("session/mini:plan") { popUpTo("home") } },
             )
         }
-        composable("done") { DoneScreen(onHome = { home() }) }
+        composable("done")
+ { DoneScreen(onHome = { home() }) }
         composable("exercise/{id}", listOf(navArgument("id") { type = NavType.StringType })) {
             ExerciseDetailScreen(it.arguments?.getString("id") ?: "push", onBack = { nav.popBackStack() })
         }

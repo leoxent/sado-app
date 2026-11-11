@@ -33,8 +33,8 @@ class LadderTest {
         val log = ExerciseLog("archerpull", List(3) { SetLog(6, 3) })
         val boosts = mapOf("archerpull" to 3)
         val ladders = mapOf("pull" to LadderProgress(3))
-        assertEquals(3, Progress.climb(ladders, boosts, listOf(e), listOf(log)) { PlanBuilder.usable(it, bar) }.ladders.getValue("pull").rung)
-        assertEquals(4, Progress.climb(ladders, boosts, listOf(e), listOf(log)) { PlanBuilder.usable(it, barBag) }.ladders.getValue("pull").rung)
+        assertEquals(3, Progress.climb(ladders, boosts, listOf(e), listOf(log), usable = { PlanBuilder.usable(it, bar) }).ladders.getValue("pull").rung)
+        assertEquals(4, Progress.climb(ladders, boosts, listOf(e), listOf(log), usable = { PlanBuilder.usable(it, barBag) }).ladders.getValue("pull").rung)
     }
 
     @Test fun weightedMovesAddKgAtTheTopOfTheRange() {

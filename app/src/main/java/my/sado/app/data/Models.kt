@@ -82,6 +82,11 @@ data class SetLog(
     val reps: Int,
     val rir: Int? = null,
     val kg: Float? = null, // extra load on a weighted move
+    val failed: Boolean = false, // "Tak larat": stopped short; reps are what was actually done
+    val secs: Int? = null, // from the set starting to Set done, rest and pauses excluded
+    val at: Int? = null, // seconds into the session when the set was done
+    val restSkipped: Boolean = false, // the rest after this set was cut well short
+    val flagged: Boolean = false, // too quick to be real (Integrity); left out of progression and volume
 )
 
 @Serializable
@@ -98,6 +103,13 @@ data class WorkoutLog(
     val avgHr: Int? = null,
     val maxHr: Int? = null,
     val bonus: Int = 0, // comeback XP, already included in xp
+    val seconds: Int? = null, // start to finish, pauses (Info screen) excluded
+    val kcal: Int? = null, // estimate for display only; never added to the food target
+    val kcalSource: String? = null, // "MET", "HR jam" or "Health Connect"
+    val startMs: Long? = null,
+    val endMs: Long? = null,
+    val doubtful: Boolean = false, // the quick-session check fired and the user said they did it
+    val mini: Boolean = false, // Sesi mini: one set per move, counts for streak and pet but not progression
 )
 
 @Serializable
@@ -131,6 +143,8 @@ data class Settings(
     val lastAutoBackup: Long? = null, // epoch day
     val lastAutoBackupError: String? = null,
     val devMode: Boolean = false,
+    val honestRestPerWeek: Int = 2, // "Rehat jujur" days a week that keep the streak
+
     val bodyPath: String? = null, // null = ikut planner/badan, "kurus" or "gempal": which starting character
     val voiceBatch: Boolean = true, // intro names and numbers made in one take and cut apart; off = one request per clip // tap the version 7 times in Settings; tools for building the app itself
 )
@@ -202,6 +216,8 @@ data class AppState(
     val boosts: Map<String, Int> = emptyMap(), // move id to reps (or 5s steps) earned above the bottom of its range
     val extraSets: Map<String, Int> = emptyMap(), // move id to sets the user added (or took off) before a workout
     val loads: Map<String, Float> = emptyMap(), // weighted move id to the extra kg it is done with now
+    val deload: Set<String> = emptySet(), // moves failed two sessions running: one set fewer next time
+    val honestRests: List<Long> = emptyList(), // "Rehat jujur" days: keep the streak, a few a week
 
     val photos: List<ProgressPhoto> = emptyList(),
     val meals: List<Meal> = emptyList(),

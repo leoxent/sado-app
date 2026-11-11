@@ -53,7 +53,16 @@ import my.sado.app.Lines
 import my.sado.app.HeartRate
 import my.sado.app.ai.Motions
 import my.sado.app.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.mutableLongStateOf
 import my.sado.app.data.AppState
+import my.sado.app.data.Burn
+import my.sado.app.data.GiveUp
+import my.sado.app.data.Health
+import my.sado.app.data.HonestRest
+import my.sado.app.data.Integrity
+
 import my.sado.app.data.Catalog
 import my.sado.app.data.ExerciseLog
 import my.sado.app.data.PlanBuilder
@@ -78,12 +87,15 @@ fun gearToday(s: AppState): List<String>? = s.gearToday?.takeIf { it.epochDay ==
 
 fun sessionFor(source: String, quizGear: Boolean = false): Pair<String, List<PlannedExercise>> {
     val s = Store.state.value
-    val mine = s.myTemplates.firstOrNull { it.id == source.removePrefix("my:") }.takeIf { source.startsWith("my:") }
+    // "mini:<source>": Sesi mini, one set per move, about 8–10 minutes
+    val mini = source.startsWith("mini:")
+    val src = source.removePrefix("mini:")
+    val mine = s.myTemplates.firstOrNull { it.id == src.removePrefix("my:") }.takeIf { src.startsWith("my:") }
     // the user's own workouts keep the reps they chose; plan and templates climb from the bottom of each range
     val (title, given) = if (mine != null) {
         mine.name to mine.moves.map { it.planned() }
-    } else if (source.startsWith("tpl:")) {
-        val t = Templates.all.first { it.id == source.removePrefix("tpl:") }
+    } else if (src.startsWith("tpl:")) {
+        val t = Templates.all.first { it.id == src.removePrefix("tpl:") }
         t.name to Templates.session(t, s.answers, s.ladders).map { Progress.boosted(it, s.boosts, s.extraSets) }
     } else {
         val today = s.plan?.sessionOn()
@@ -94,32 +106,53 @@ fun sessionFor(source: String, quizGear: Boolean = false): Pair<String, List<Pla
     val gear = gearToday(s).takeIf { !quizGear }
     val list = if (gear == null || s.answers == null) given else
         PlanBuilder.adapt(given, PlanBuilder.withGear(s.answers, gear), s.ladders).map { e -> if (given.any { it.id == e.id }) e else Progress.boosted(e, s.boosts, s.extraSets) }
-    // deload week and short sleep (<6h) each take one set off every move; recovery drives growth
+    if (mini) return "Sesi mini · $title" to list.map { it.copy(sets = 1) }
+    // deload week and short sleep (<6h) each take one set off every move; recovery drives growth.
+    // A move failed two sessions running loses one more set, this session only.
     val shortSleep = s.sleep.lastOrNull { it.epochDay == LocalDate.now().toEpochDay() }?.let { it.hours < 6f } == true
     val cut = (if (Progress.isDeloadWeek(s)) 1 else 0) + (if (shortSleep) 1 else 0)
-    val tag = listOfNotNull("deload week".takeIf { Progress.isDeloadWeek(s) }, "kurang tidur".takeIf { shortSleep })
-    return (if (tag.isEmpty()) title else "$title (${tag.joinToString(", ")})") to list.map { it.copy(sets = (it.sets - cut).coerceAtLeast(1)) }
+    val eased = list.any { it.id in s.deload }
+    val tag = listOfNotNull("deload week".takeIf { Progress.isDeloadWeek(s) }, "kurang tidur".takeIf { shortSleep }, "ringan sikit".takeIf { eased })
+    return (if (tag.isEmpty()) title else "$title (${tag.joinToString(", ")})") to
+        list.map { it.copy(sets = (it.sets - cut - (if (it.id in s.deload) 1 else 0)).coerceAtLeast(1)) }
 }
 
+// when the session screen left composition for Info; process memory is enough, a killed process loses the session anyway
+private var pausedAt = 0L
+
+private class Pending(val quit: Boolean, val logs: List<ExerciseLog>, val hr: Pair<Int, Int>?, val verdict: Integrity.Verdict)
+
 @Composable
-fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -> Unit, onExit: () -> Unit) {
+fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -> Unit, onExit: () -> Unit, onMini: () -> Unit = {}) {
     val settings = Store.state.collectAsState().value.settings
-    val (title, plan) = remember { sessionFor(source) }
+    val (title, initial) = remember { sessionFor(source) }
+    val mini = source.startsWith("mini:")
     // everything that tracks progress is saveable, so opening Info and coming back resumes the same set
     val startedAt = rememberSaveable { System.currentTimeMillis() }
+    var pausedMs by rememberSaveable { mutableLongStateOf(0L) }
     var hrStarted by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     DisposableEffect(Unit) {
+        if (pausedAt > 0) { pausedMs += System.currentTimeMillis() - pausedAt; pausedAt = 0 }
         settings.hrDevice?.let { if (HeartRate.hasPermissions(context)) HeartRate.connect(context, it) }
         if (hrStarted) HeartRate.resume() else { HeartRate.startRecording(); hrStarted = true }
-        onDispose { HeartRate.pause() }
+        onDispose { HeartRate.pause(); pausedAt = System.currentTimeMillis() }
     }
-    if (plan.isEmpty()) {
+    // resting heart rate from Health Connect, for the flat-HR check
+    var restingHr by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(Unit) {
+        if (settings.healthConnect) restingHr = withContext(Dispatchers.IO) { runCatching { if (Health.available(context)) Health.today(context).restingHr else null }.getOrNull() }
+    }
+    if (initial.isEmpty()) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Title("Takde move", "Plan atau template ni kosong untuk equipment ko.", onBack = onExit)
         }
         return
     }
+    // the moves can change mid-session ("Tak larat" twice: one rung down); the ones swapped out still earn their sets
+    val plan = rememberSaveable(saver = listSaver(PlannedExercise.serializer())) { mutableStateListOf<PlannedExercise>().apply { addAll(initial) } }
+    val swappedOut = rememberSaveable(saver = listSaver(PlannedExercise.serializer())) { mutableStateListOf() }
+    fun activeNow() = System.currentTimeMillis() - startedAt - pausedMs
 
     var phase by rememberSaveable { mutableStateOf(if (settings.warmup) Phase.Warmup else Phase.Work) }
     var idx by rememberSaveable { mutableIntStateOf(0) }
@@ -129,12 +162,28 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
     var spoken by rememberSaveable { mutableStateOf("") }
     var quitOpen by remember { mutableStateOf(false) }
     var discardOpen by remember { mutableStateOf(false) }
+    var giveUpOpen by remember { mutableStateOf(false) }
+    var dropTo by remember { mutableStateOf<String?>(null) }
+    var pending by remember { mutableStateOf<Pending?>(null) }
+    var offerOpen by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
 
     val cur = plan[idx]
     val move = Catalog.get(cur.id)
     // the extra kg for a weighted move; changing it here carries to the next session
     var kg by rememberSaveable(idx) { mutableFloatStateOf(Progress.load(Store.state.value.loads, cur.id)) }
+    // after "Tak larat": this move's next sets ask for less and rest longer
+    var tgt by rememberSaveable(idx, cur.id) { mutableStateOf<Int?>(null) }
+    var extraRest by rememberSaveable(idx, cur.id) { mutableIntStateOf(0) }
+    val target = tgt ?: cur.target
+    val label = tgt?.let { if (move.timed) "${it}s" else "$it" } ?: cur.reps
+    // when the current set started, on the active clock (pauses left out)
+    var setKey by rememberSaveable { mutableStateOf("") }
+    var setStart by rememberSaveable { mutableLongStateOf(0L) }
+    LaunchedEffect(idx, phase, sets.size, cur.id) {
+        val k = "$idx-${cur.id}-${sets.size}"
+        if (phase == Phase.Work && k != setKey) { setKey = k; setStart = activeNow() }
+    }
     LaunchedEffect(idx, phase) {
         // don't repeat the line when coming back from Info
         val key = "$idx-$phase-${sets.size}"
@@ -144,40 +193,73 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
             Phase.Warmup -> Coach.say(if (my.sado.app.data.Progress.lowImpact(my.sado.app.data.Store.state.value)) Lines.warmupLow else Lines.warmup)
             Phase.Work -> if (sets.isEmpty()) Coach.sayParts(Coach.intro(move.name, cur.sets, cur.reps)) else Coach.say(Lines.set(sets.size + 1, last = sets.size + 1 == cur.sets))
             Phase.Effort -> Coach.say(Lines.effort)
-            Phase.Rest -> Coach.say(Lines.rest(settings.restSeconds))
+            Phase.Rest -> Coach.say(Lines.rest(settings.restSeconds + extraRest))
         }
     }
 
-    fun finish(quit: Boolean) {
-        val all = logs.toList() + if (sets.isNotEmpty() && logs.none { it.id == cur.id }) listOf(ExerciseLog(cur.id, sets.toList())) else emptyList()
-        val xp = Progress.sessionXp(plan, all)
-        val minutes = ((System.currentTimeMillis() - startedAt) / 60000).toInt().coerceAtLeast(1)
-        val hr = HeartRate.stopRecording()
-        val bonus = Progress.comebackBonus(Store.state.value, xp)
+    fun everyMove() = plan.toList() + swappedOut
+
+    fun save(p: Pending, accepted: Boolean) {
+        val all = p.logs
+        val xp = Progress.sessionXp(everyMove(), all)
+        val end = System.currentTimeMillis()
+        val seconds = (activeNow() / 1000).toInt().coerceAtLeast(1)
+        val minutes = (seconds / 60).coerceAtLeast(1)
+        // said yes but the watch barely moved: accepted, without the comeback bonus
+        val bonus = if (accepted && p.verdict.hrFlat) 0 else Progress.comebackBonus(Store.state.value, xp)
+        val (kcal, kcalSource) = Burn.estimate(all, Store.state.value.profile, seconds, p.hr?.first)
         Store.update { s ->
-            val c = Progress.climb(s.ladders, s.boosts, plan, all, s.loads) { PlanBuilder.usable(it, s.answers) }
+            // Sesi mini keeps the streak and the pet, but one set per move says nothing about strength
+            val c = if (mini) Progress.Climb(s.ladders, s.boosts, s.loads)
+            else Progress.climb(s.ladders, s.boosts, everyMove(), all, s.loads, { PlanBuilder.usable(it, s.answers) }, s.logs)
             // back from a break: XP counts double until the best reached before
             s.copy(
                 xp = s.xp + xp + bonus,
                 peakXp = maxOf(s.peakXp, s.xp + xp + bonus),
-                logs = s.logs + WorkoutLog(LocalDate.now().toEpochDay(), title, minutes, all, xp + bonus, quit, hr?.first, hr?.second, bonus),
+                logs = s.logs + WorkoutLog(
+                    LocalDate.now().toEpochDay(), title, minutes, all, xp + bonus, p.quit, p.hr?.first, p.hr?.second, bonus,
+                    seconds = seconds, kcal = kcal, kcalSource = kcalSource, startMs = startedAt, endMs = end, doubtful = accepted, mini = mini,
+                ),
                 ladders = c.ladders,
                 boosts = c.boosts,
                 loads = c.loads,
+                deload = if (mini) s.deload else GiveUp.nextDeload(s.deload, all, s.logs),
                 gearToday = null, // the next workout starts from the quiz's gear again
-                plan = s.plan?.let { p -> s.answers?.let { a -> p.mapExercises { PlanBuilder.refresh(it, a, c.ladders) } } } ?: s.plan,
+                plan = s.plan?.let { pl -> s.answers?.let { a -> pl.mapExercises { PlanBuilder.refresh(it, a, c.ladders) } } } ?: s.plan,
             )
         }
         Feedback.success()
         val s = Store.state.value
-        Coach.say(when { xp == 0 -> Lines.zero; bonus > 0 && s.xp >= s.peakXp -> Lines.backAtBest; bonus > 0 -> Lines.comeback; quit -> Lines.quit; else -> Lines.done })
+        Coach.say(when { xp == 0 -> Lines.zero; bonus > 0 && s.xp >= s.peakXp -> Lines.backAtBest; bonus > 0 -> Lines.comeback; p.quit -> Lines.quit; else -> Lines.done })
         onFinished()
+    }
+
+    fun finish(quit: Boolean) {
+        val raw = logs.toList() + if (sets.isNotEmpty() && logs.none { it.id == cur.id }) listOf(ExerciseLog(cur.id, sets.toList())) else emptyList()
+        val timedTarget = { id: String -> everyMove().firstOrNull { it.id == id }?.takeIf { Catalog.get(id).timed }?.target }
+        val all = Integrity.flag(raw, timedTarget)
+        val hr = HeartRate.stopRecording()
+        val p = Pending(quit, all, hr, Integrity.verdict(all, hr?.first, restingHr))
+        // too quick to be real: ask kindly before saving anything
+        if (p.verdict.doubtful && Progress.sessionXp(everyMove(), all) > 0) pending = p else save(p, accepted = false)
     }
 
     fun nextExercise(skipped: Boolean) {
         logs += ExerciseLog(cur.id, sets.toList(), skipped)
         sets.clear(); reps = 0
         if (idx == plan.lastIndex) finish(false) else { idx++; phase = Phase.Work }
+    }
+
+    fun logSet(done: Int, failed: Boolean) {
+        val now = activeNow()
+        sets += SetLog(done, kg = kg.takeIf { move.weighted }, failed = failed, secs = ((now - setStart) / 1000).toInt(), at = (now / 1000).toInt())
+        reps = 0
+        toast = null
+        if (failed) {
+            GiveUp.after(cur, target, done)?.let { n -> tgt = n.target; extraRest += n.extraRest }
+            if (GiveUp.offerDrop(sets, cur.sets)) dropTo = GiveUp.rungBelow(cur.id, Store.state.value.answers)
+        }
+        phase = if (sets.size >= cur.sets) Phase.Effort else Phase.Rest
     }
 
     BackHandler { quitOpen = true }
@@ -203,18 +285,19 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 // camera stays outside key() so it isn't rebound every set
                 if (!camOn) MoveImage(cur.id)
                 if (camOn) PoseCamera(cur.id, onRep = { if (!move.timed && phase == Phase.Work) { reps++; Feedback.rep() } })
-                key(idx, sets.size) {
-                    if (move.timed) TimedSet(cur.target) { secs -> reps = secs }
-                    else TargetCard(cur.reps, if (camOn) reps else null)
+                key(idx, sets.size, cur.id) {
+                    if (move.timed) TimedSet(target) { secs -> reps = secs }
+                    else TargetCard(label, if (camOn) reps else null)
                 }
+                if (tgt != null) Text("Target diturunkan ke $label lepas set tadi · rest +${extraRest}s", color = SadoColors.Sky, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 if (move.weighted) LoadPicker(kg) { kg = it }
-                // set pips: done sets fill lime, the current one is outlined
+                // set pips: done sets fill lime (a "Tak larat" set orange), the current one is outlined
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
                     repeat(cur.sets) { i ->
                         val done = i < sets.size
                         Box(
                             Modifier.size(width = 36.dp, height = 10.dp).clip(RoundedCornerShape(5.dp))
-                                .background(if (done) SadoColors.Accent else SadoColors.Track)
+                                .background(if (done && sets[i].failed) SadoColors.Streak else if (done) SadoColors.Accent else SadoColors.Track)
                                 .border(2.dp, if (i == sets.size) SadoColors.Accent else Color.Transparent, RoundedCornerShape(5.dp)),
                         )
                     }
@@ -222,12 +305,10 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 if (toast != null) Text(toast!!, color = SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 // no rep tapping: one press per set, reps count as the target unless the camera or timer measured them
                 PrimaryButton(if (sets.size + 1 >= cur.sets) "Set done · last set" else "Set done") {
-                    sets += SetLog(if (reps > 0) reps else cur.target, kg = kg.takeIf { move.weighted })
-                    reps = 0
-                    toast = null
                     Feedback.success()
-                    phase = if (sets.size >= cur.sets) Phase.Effort else Phase.Rest
+                    logSet(if (reps > 0) reps else target, failed = false)
                 }
+                SecondaryButton("Tak larat · give up set ni", Modifier.fillMaxWidth(), color = SadoColors.Streak) { giveUpOpen = true }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     SecondaryButton("Skip move", Modifier.weight(1f)) {
                         toast = "${move.name} di-skip · 0 XP untuk move ni"
@@ -249,13 +330,88 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 for (i in sets.indices) sets[i] = sets[i].copy(rir = rir)
                 if (idx == plan.lastIndex) { logs += ExerciseLog(cur.id, sets.toList()); sets.clear(); finish(false) } else phase = Phase.Rest
             }
-            Phase.Rest -> Rest(
-                seconds = settings.restSeconds,
-                nextLabel = if (sets.size >= cur.sets) "Lepas ni · move ${idx + 2} / ${plan.size}" else "Lepas ni · set ${sets.size + 1} / ${cur.sets}",
-                next = if (sets.size >= cur.sets) plan[idx + 1] else cur,
-                onDone = { if (sets.size >= cur.sets) nextExercise(skipped = false) else phase = Phase.Work },
-            )
+            Phase.Rest -> {
+                val restFor = settings.restSeconds + extraRest
+                Rest(
+                    seconds = restFor,
+                    nextLabel = if (sets.size >= cur.sets) "Lepas ni · move ${idx + 2} / ${plan.size}" else "Lepas ni · set ${sets.size + 1} / ${cur.sets}",
+                    next = if (sets.size >= cur.sets) plan[idx + 1] else cur.copy(reps = label, target = target),
+                    onDone = { left ->
+                        if (sets.isNotEmpty() && Integrity.restSkipped(restFor, left)) sets[sets.lastIndex] = sets.last().copy(restSkipped = true)
+                        if (sets.size >= cur.sets) nextExercise(skipped = false) else phase = Phase.Work
+                    },
+                )
+            }
         }
+    }
+
+    if (giveUpOpen) GiveUpDialog(move.timed, target, if (move.timed) reps else (target - 1).coerceAtLeast(0), onDismiss = { giveUpOpen = false }) { done ->
+        giveUpOpen = false
+        Feedback.tap()
+        logSet(done, failed = true)
+    }
+
+    dropTo?.let { lower ->
+        val m = Catalog.get(lower)
+        val left = cur.sets - sets.size
+        AlertDialog(
+            onDismissRequest = { dropTo = null },
+            containerColor = SadoColors.Surface,
+            title = { Text("Dua set berturut tak larat", color = SadoColors.Text, fontWeight = FontWeight.ExtraBold) },
+            text = { Text("Tukar ke ${m.name} untuk $left set selebihnya? Form cantik lagi bagus dari rep yang terpaksa.", color = SadoColors.TextMuted) },
+            confirmButton = {
+                TextButton({
+                    val a = Store.state.value.answers
+                    val (_, reps2, target2) = if (a != null) PlanBuilder.dose(m, a) else Triple(left, cur.reps, cur.target)
+                    val next = Progress.boosted(PlannedExercise(lower, left, reps2, target2), Store.state.value.boosts)
+                    logs += ExerciseLog(cur.id, sets.toList())
+                    swappedOut += cur
+                    sets.clear()
+                    plan[idx] = next
+                    dropTo = null
+                }) { Text("Ya, turun", color = SadoColors.Accent, fontWeight = FontWeight.ExtraBold) }
+            },
+            dismissButton = { TextButton({ dropTo = null }) { Text("Tak, teruskan", color = SadoColors.Text) } },
+        )
+    }
+
+    pending?.let { p ->
+        AlertDialog(
+            onDismissRequest = {},
+            containerColor = SadoColors.Surface,
+            icon = { Image(painterResource(R.drawable.face_think), null, Modifier.size(88.dp)) },
+            title = { Text("Sesi ni laju gila 😅 Betul buat?", color = SadoColors.Text, fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Text(
+                    "${p.verdict.flagged} / ${p.verdict.total} set siap terlalu cepat" + (if (p.verdict.hrFlat) ", dan heart rate hampir sama macam rehat" else "") +
+                        ". Set yang laju tak dikira untuk naik level move, supaya plan tak jadi lagi susah dari yang badan mampu.",
+                    color = SadoColors.TextMuted,
+                )
+            },
+            confirmButton = { TextButton({ pending = null; save(p, accepted = true) }) { Text("Ya, buat", color = SadoColors.Accent, fontWeight = FontWeight.ExtraBold) } },
+            dismissButton = { TextButton({ pending = null; offerOpen = true }) { Text("Tak, skip je hari ni", color = SadoColors.Text) } },
+        )
+    }
+
+    if (offerOpen) {
+        val s = Store.state.collectAsState().value
+        AlertDialog(
+            onDismissRequest = { offerOpen = false; onExit() },
+            containerColor = SadoColors.Surface,
+            title = { Text("Takpe, jujur tu bagus", color = SadoColors.Text, fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Takde penalti. Pilih satu:", color = SadoColors.TextMuted)
+                    if (!mini) PrimaryButton("Sesi mini · 8–10 minit") { offerOpen = false; onMini() }
+                    if (HonestRest.canTake(s)) SecondaryButton("Rehat jujur hari ni · streak selamat (${HonestRest.left(s)} lagi minggu ni)", Modifier.fillMaxWidth()) {
+                        Store.update { HonestRest.take(it) }
+                        offerOpen = false
+                        onExit()
+                    }
+                }
+            },
+            confirmButton = { TextButton({ offerOpen = false; onExit() }) { Text("Balik", color = SadoColors.Text) } },
+        )
     }
 
     if (quitOpen) {
@@ -295,7 +451,33 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
     )
 }
 
+// "Tak larat": how many reps (or seconds) were really done before stopping
+@Composable
+private fun GiveUpDialog(timed: Boolean, target: Int, start: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    var done by remember { mutableIntStateOf(start.coerceIn(0, target)) }
+    val step = if (timed) 5 else 1
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SadoColors.Surface,
+        title = { Text("Tak larat? Takpe.", color = SadoColors.Text, fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(if (timed) "Berapa saat sempat tahan?" else "Berapa rep betul-betul siap?", color = SadoColors.TextMuted)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SecondaryButton("−", Modifier.size(width = 56.dp, height = 48.dp)) { done = (done - step).coerceAtLeast(0) }
+                    Text(if (timed) "${done}s" else "$done", color = SadoColors.Text, fontSize = 44.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+                    SecondaryButton("+", Modifier.size(width = 56.dp, height = 48.dp)) { done = (done + step).coerceAtMost(target) }
+                }
+                Text("Target: ${if (timed) "${target}s" else "$target"}. Set lepas ni akan disesuaikan, dan move ni tak naik level sesi ni.", color = SadoColors.TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
+        },
+        confirmButton = { TextButton({ onSave(done) }) { Text("Simpan set", color = SadoColors.Accent, fontWeight = FontWeight.ExtraBold) } },
+        dismissButton = { TextButton(onDismiss) { Text("Batal", color = SadoColors.Text) } },
+    )
+}
+
 // the load on a weighted move, in KG_STEP steps; a backpack is loaded with books or water bottles (1 litre = 1 kg)
+
 @Composable
 private fun LoadPicker(kg: Float, onChange: (Float) -> Unit) {
     Row(
@@ -413,7 +595,7 @@ private fun Warmup(onDone: () -> Unit, onQuit: () -> Unit) {
 }
 
 @Composable
-private fun Rest(seconds: Int, nextLabel: String, next: PlannedExercise, onDone: () -> Unit) {
+private fun Rest(seconds: Int, nextLabel: String, next: PlannedExercise, onDone: (left: Int) -> Unit) {
     var left by rememberSaveable { mutableIntStateOf(seconds) }
     LaunchedEffect(Unit) {
         while (left > 0) {
@@ -441,7 +623,7 @@ private fun Rest(seconds: Int, nextLabel: String, next: PlannedExercise, onDone:
         SecondaryButton("−15s", Modifier.weight(1f)) { left = (left - 15).coerceAtLeast(0) }
         SecondaryButton("+15s", Modifier.weight(1f)) { left += 15 }
     }
-    PrimaryButton(if (left == 0) "Jom" else "Skip rest", onClick = onDone)
+    PrimaryButton(if (left == 0) "Jom" else "Skip rest") { onDone(left) }
     NextUp(nextLabel, next)
 }
 
@@ -493,6 +675,16 @@ fun DoneScreen(onHome: () -> Unit) {
     val zero = log.xp == 0
     // badges this workout unlocked: shown once, then remembered as seen
     val fresh = remember { my.sado.app.data.Achievements.fresh(s) }
+    // Health Connect has the real burn for this window when a watch synced it: prefer that and say so
+    val context = LocalContext.current
+    LaunchedEffect(log.startMs) {
+        val start = log.startMs ?: return@LaunchedEffect
+        val end = log.endMs ?: return@LaunchedEffect
+        if (!s.settings.healthConnect || log.kcalSource == "Health Connect") return@LaunchedEffect
+        val hc = withContext(Dispatchers.IO) { Health.activeKcal(context, start, end) } ?: return@LaunchedEffect
+        Store.update { st -> st.copy(logs = st.logs.map { if (it.startMs == start) it.copy(kcal = hc, kcalSource = "Health Connect") else it }) }
+    }
+
     LaunchedEffect(Unit) { if (fresh.isNotEmpty()) Store.update { it.copy(seenAchievements = it.seenAchievements + fresh.map { a -> a.id }) } }
 
     Box(Modifier.fillMaxSize()) {
@@ -516,9 +708,17 @@ fun DoneScreen(onHome: () -> Unit) {
         )
         Card {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Stat("${log.minutes}", "minit")
+                Stat(log.seconds?.let { "%d:%02d".format(it / 60, it % 60) } ?: "${log.minutes}", if (log.seconds != null) "masa" else "minit")
                 Stat("$totalReps", "rep")
                 Stat("${Progress.streak(s).days}", "streak", SadoColors.Streak)
+            }
+            if (log.kcal != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) { Stat("${log.kcal}", "kcal dibakar", SadoColors.Streak) }
+                Text(
+                    when (log.kcalSource) { "Health Connect" -> "Dari Health Connect"; "HR jam" -> "Anggaran dari heart rate jam"; else -> "Anggaran MET (tanpa jam)" } +
+                        " · tak ditambah ke target makan, semakan mingguan dah urus kalori.",
+                    color = SadoColors.TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                )
             }
             if (log.avgHr != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                 Stat("${log.avgHr}", "HR purata")

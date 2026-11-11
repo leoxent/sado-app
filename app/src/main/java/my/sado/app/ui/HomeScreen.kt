@@ -53,7 +53,7 @@ import my.sado.app.data.Store
 import java.time.LocalDate
 
 @Composable
-fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Unit, onJourney: () -> Unit, onSport: () -> Unit, onTest: () -> Unit, onHealth: () -> Unit, onSettings: () -> Unit = {}, onPet: () -> Unit = {}, onRest: () -> Unit = {}, onHealthCheck: () -> Unit = {}, onPetEvolve: () -> Unit = {}) {
+fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Unit, onJourney: () -> Unit, onSport: () -> Unit, onTest: () -> Unit, onHealth: () -> Unit, onSettings: () -> Unit = {}, onPet: () -> Unit = {}, onRest: () -> Unit = {}, onHealthCheck: () -> Unit = {}, onPetEvolve: () -> Unit = {}, onMini: () -> Unit = {}) {
     val s = Store.state.collectAsState().value
     var feeding by remember { mutableStateOf<PetFeed?>(null) }
     var heroWidth by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -306,6 +306,16 @@ fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Uni
             }
             if (s.answers?.pull == -1) Callout("Nak belakang lebar?", "Pull-up bar pintu (RM40–80) paling berbaloi untuk V-shape. Untuk kaki, isi beg galas dengan buku sebagai beban.", SadoColors.Violet, Modifier.appear(n++))
             Box(Modifier.appear(n++)) { PrimaryButton(if (doneToday) "WORKOUT LAGI" else "START WORKOUT", onClick = onStart) }
+            // a hard day: a short real session, or an honest rest, both better than tapping through
+            if (!doneToday) Row(Modifier.fillMaxWidth().appear(n++), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecondaryButton("Sesi mini · 10 min", Modifier.weight(1f), onClick = onMini)
+                val rested = today.toEpochDay() in s.honestRests
+                SecondaryButton(
+                    if (rested) "Rehat jujur ✓" else "Rehat jujur (${my.sado.app.data.HonestRest.left(s)})", Modifier.weight(1f),
+                    color = if (my.sado.app.data.HonestRest.canTake(s)) SadoColors.Sky else SadoColors.TextMuted,
+                ) { if (my.sado.app.data.HonestRest.canTake(s)) Store.update { my.sado.app.data.HonestRest.take(it) } }
+            }
+
             Text(
                 "Main futsal atau jogging hari ni? Log sukan",
                 color = SadoColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold,
