@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Sado" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/sado_bg</item>
+        <item name="android:statusBarColor">@color/sado_bg</item>
+        <item name="android:navigationBarColor">@color/sado_bg</item>
+    </style>
+    <color name="sado_bg">#FF0E0F12</color>
+    <color name="sado_accent">#FFC8F04A</color>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- only the export folder is shareable; photos and state stay private -->
+    <cache-path name="exports" path="exports/" />
+    <!-- the camera app writes a food snap here; it is read into memory and deleted straight away -->
+    <cache-path name="foodcam" path="foodcam/" />
+    <!-- a timelapse the user made; leaves the phone only through their own Share tap -->
+    <cache-path name="timelapse" path="timelapse/" />
+</paths>
