@@ -92,6 +92,7 @@ import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
 import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.SegmentationMask
 import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
+import my.sado.app.data.PhotoTrend
 import my.sado.app.data.Silhouette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -175,10 +176,26 @@ object Photos {
         runCatching { File(dir(context), file).delete() }
     }
 
-    // trend over front photos: rolling mean of the last 3 so one slouchy photo doesn't swing it
-    fun trend(photos: List<ProgressPhoto>): List<Float> {
-        val r = photos.filter { it.angle == 0 && it.ratioKind == 1 && it.ratio != null }.sortedBy { it.epochDay }.map { it.ratio!! }
-        return r.indices.map { i -> r.subList(maxOf(0, i - 2), i + 1).average().toFloat() }
+}
+
+// the 4-week rolling average as a line, newest on the right
+@Composable
+private fun TrendLine(points: List<Pair<Long, Float>>, modifier: Modifier) {
+    val accent = SadoColors.Accent
+    val track = SadoColors.Track
+    androidx.compose.foundation.Canvas(modifier) {
+        val lo = points.minOf { it.second }
+        val hi = points.maxOf { it.second }
+        val d0 = points.first().first
+        val span = (points.last().first - d0).coerceAtLeast(1)
+        fun at(p: Pair<Long, Float>) = androidx.compose.ui.geometry.Offset(
+            size.width * (p.first - d0) / span,
+            size.height * (if (hi - lo < 0.001f) 0.5f else 0.9f - 0.8f * (p.second - lo) / (hi - lo)),
+        )
+        drawLine(track, androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2f)
+        val path = androidx.compose.ui.graphics.Path().apply { points.forEachIndexed { i, p -> at(p).let { if (i == 0) moveTo(it.x, it.y) else lineTo(it.x, it.y) } } }
+        drawPath(path, accent, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 6f, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        drawCircle(accent, 9f, at(points.last()))
     }
 }
 
@@ -224,21 +241,16 @@ fun BodyScreen(onCamera: () -> Unit, onGallery: () -> Unit, onFood: () -> Unit) 
             PrimaryButton("Ambil gambar minggu ni", onClick = onCamera)
         }
 
-        val trend = Photos.trend(s.photos)
+        val trend = PhotoTrend.rolling(s.photos)
         Card {
             Text("Trend bahu : pinggang (depan)", color = SadoColors.Text, fontSize = 19.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
             if (trend.size < 2) Text("Perlu sekurang-kurangnya 2 gambar depan yang badan nampak penuh.", color = SadoColors.TextMuted, fontSize = 13.sp)
             else {
-                val change = ((trend.last() / trend.first() - 1) * 100).roundToInt()
-                Text((if (change >= 0) "+" else "") + "$change% sejak gambar pertama", color = if (change >= 0) SadoColors.Accent else SadoColors.Streak, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                val lo = trend.min(); val hi = trend.max()
-                Row(Modifier.fillMaxWidth().height(60.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
-                    trend.takeLast(12).forEach { v ->
-                        val f = if (hi - lo < 0.001f) 0.6f else 0.25f + 0.75f * (v - lo) / (hi - lo)
-                        Box(Modifier.weight(1f).fillMaxHeight(f).clip(RoundedCornerShape(4.dp)).background(SadoColors.Accent))
-                    }
-                }
-                Text("Purata bergerak 3 gambar · anggaran AI dalam phone, bukan ukuran pita. Postur dan cahaya boleh ubah ±5%.", color = SadoColors.TextMuted, fontSize = 12.sp)
+                val change = ((trend.last().second / trend.first().second - 1) * 100).roundToInt()
+                Text((if (change >= 0) "+" else "") + "$change% sejak mula", color = if (change >= 0) SadoColors.Accent else SadoColors.Streak, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Sekarang ${"%.2f".format(trend.last().second)}", color = SadoColors.TextMuted, fontSize = 13.sp)
+                TrendLine(trend, Modifier.fillMaxWidth().height(80.dp))
+                Text("Purata 4 minggu, bukan gambar sehari · anggaran AI dalam phone, bukan ukuran pita. Postur dan cahaya boleh ubah ±5%.", color = SadoColors.TextMuted, fontSize = 12.sp)
             }
         }
 
@@ -374,7 +386,16 @@ fun GalleryScreen(onBack: () -> Unit, onCompare: (String, String) -> Unit, onVie
             Segmented(angleNames, angle) { angle = it; exitSelect() }
             if (list.size >= 2 && !selecting) {
                 PrimaryButton("Tengok perubahan (slaid)") { onViewer(angle, null) }
-                SecondaryButton("Jana video timelapse", Modifier.fillMaxWidth()) { video = true }
+                PhotoTrend.compareDefault(list)?.let { (a, b) ->
+                    SecondaryButton("Banding: terbaru vs ${b.epochDay - a.epochDay} hari lepas", Modifier.fillMaxWidth()) { onCompare(a.file, b.file) }
+                }
+            }
+            // the timelapse is a reward: it opens at 8 front photos, with the way there shown
+            val front = PhotoTrend.frontCount(s.photos)
+            if (!selecting && PhotoTrend.timelapseOpen(s.photos) && list.size >= 2) SecondaryButton("Jana video timelapse", Modifier.fillMaxWidth()) { video = true }
+            else if (!selecting && !PhotoTrend.timelapseOpen(s.photos)) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Video timelapse terbuka pada ${PhotoTrend.TIMELAPSE_AT} gambar depan · $front / ${PhotoTrend.TIMELAPSE_AT}", color = SadoColors.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Bar(front.toFloat() / PhotoTrend.TIMELAPSE_AT)
             }
             Text(
                 if (selecting) "Tekan gambar untuk pilih. Pilih 2 untuk banding." else "Tekan gambar untuk buka. Tekan lama untuk pilih banyak.",
