@@ -116,8 +116,10 @@ fun sessionFor(source: String, quizGear: Boolean = false): Pair<String, List<Pla
         list.map { it.copy(sets = (it.sets - cut - (if (it.id in s.deload) 1 else 0)).coerceAtLeast(1)) }
 }
 
-// when the session screen left composition for Info; process memory is enough, a killed process loses the session anyway
+// when the session screen left composition (for Info), and which session that was, so a later session never inherits it;
+// process memory is enough, a killed process loses the session anyway
 private var pausedAt = 0L
+private var pausedSession = 0L
 
 private class Pending(val quit: Boolean, val logs: List<ExerciseLog>, val hr: Pair<Int, Int>?, val verdict: Integrity.Verdict)
 
@@ -132,10 +134,11 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
     var hrStarted by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     DisposableEffect(Unit) {
-        if (pausedAt > 0) { pausedMs += System.currentTimeMillis() - pausedAt; pausedAt = 0 }
+        if (pausedAt > 0 && pausedSession == startedAt) pausedMs += System.currentTimeMillis() - pausedAt
+        pausedAt = 0
         settings.hrDevice?.let { if (HeartRate.hasPermissions(context)) HeartRate.connect(context, it) }
         if (hrStarted) HeartRate.resume() else { HeartRate.startRecording(); hrStarted = true }
-        onDispose { HeartRate.pause(); pausedAt = System.currentTimeMillis() }
+        onDispose { HeartRate.pause(); pausedAt = System.currentTimeMillis(); pausedSession = startedAt }
     }
     // resting heart rate from Health Connect, for the flat-HR check
     var restingHr by remember { mutableStateOf<Int?>(null) }
