@@ -93,7 +93,6 @@ object Health {
     }.getOrNull()?.inKilocalories?.toInt()?.takeIf { it > 0 }
 
     suspend fun sessions(context: Context, days: Long = 7): List<HcSession> {
-
         if (!available(context)) return emptyList()
         val c = client(context)
         val range = TimeRangeFilter.between(startOf(LocalDate.now().minusDays(days)), Instant.now())

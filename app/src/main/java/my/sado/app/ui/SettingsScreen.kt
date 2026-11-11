@@ -107,7 +107,6 @@ fun SettingsScreen(onProfile: () -> Unit, onPlanner: () -> Unit, onReset: () -> 
         Label("Rehat jujur seminggu")
         Segmented(listOf("0", "1", "2", "3"), s.settings.honestRestPerWeek.coerceIn(0, 3)) { i -> set { it.copy(honestRestPerWeek = i) } }
         Text("Hari rehat yang kekalkan streak. Lagi baik dari tekan Next tanpa buat.", color = SadoColors.TextMuted, fontSize = 13.sp)
-
         Label("Lagi")
         Card(padding = 12) {
             MenuRow("Suara coach AI", "ElevenLabs · suara santai", SadoColors.Pink, SadoIcons.Mic, onVoice)

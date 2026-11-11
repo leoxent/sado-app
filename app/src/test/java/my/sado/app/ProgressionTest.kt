@@ -59,7 +59,6 @@ class ProgressionTest {
         assertEquals("18", session("diamond", "8–12", mapOf("diamond" to 99)).reps)
         // one-arm push-up now hands over to the weighted push-up at the top of its range
         assertEquals("12", session("onearm", "8–12", mapOf("onearm" to 99)).reps)
-
         // plank 30s climbs 5s a step, at most double
         assertEquals("35s", session("plank", "30s", mapOf("plank" to 1)).reps)
         assertEquals("60s", session("plank", "30s", mapOf("plank" to 99)).reps)

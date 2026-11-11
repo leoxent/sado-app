@@ -315,7 +315,6 @@ fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Uni
                     color = if (my.sado.app.data.HonestRest.canTake(s)) SadoColors.Sky else SadoColors.TextMuted,
                 ) { if (my.sado.app.data.HonestRest.canTake(s)) Store.update { my.sado.app.data.HonestRest.take(it) } }
             }
-
             Text(
                 "Main futsal atau jogging hari ni? Log sukan",
                 color = SadoColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold,

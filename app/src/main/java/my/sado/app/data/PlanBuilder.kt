@@ -101,12 +101,10 @@ object PlanBuilder {
         // intervals are for cardio only; on Kurus & tone the strength moves stay rep-based (12–15) so they keep the muscle
         return when {
             m.group == "cardio" -> Triple(3, "40s work, 20s rest", 40)
-
             m.id == "negative" -> Triple(sets, "5 rep turun slow", 5)
             m.id == "pullup" || m.id == "chinup" -> if (a.pull == 1) Triple(sets, "maximum rep", 5) else Triple(sets, "6–10", 10)
             m.id == "archerpull" -> Triple(sets, "3–6", 6)
             m.weighted -> Triple(sets, "5–8", 8)
-
             m.timed -> listOf(20, 30, 45)[a.level].let { Triple(sets, "${it}s", it) }
             hyper && a.shape.filter { it in hyperShapes } == listOf("bulk") -> Triple(sets, "6–10", 10)
             hyper -> if (a.level == 0) Triple(sets, "8–10", 10) else Triple(sets, "8–12", 12)

@@ -122,7 +122,6 @@ object Catalog {
         "push" to listOf("kneepush", "push", "decline", "archer", "onearm", "wpush"),
         "squat" to listOf("squat", "split", "shrimp", "pistol", "wpistol"),
         "pull" to listOf("invrow", "negative", "pullup", "archerpull", "wpullup"),
-
     )
 
     // what each piece of home equipment is called

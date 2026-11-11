@@ -70,7 +70,6 @@ private val groupDetail = mapOf(
 private val groupMuscleIds = mapOf(
     "chest" to setOf("chest"), "side_delts" to setOf("delts"), "front_delts" to setOf("delts"), "rear_delts" to setOf("delts"),
     "lats" to setOf("lats"), "traps" to setOf("traps"), "lower_back" to setOf("lowerback"), "arms" to setOf("biceps", "triceps", "forearms"),
-
     "abs" to setOf("abs", "obliques"), "legs" to setOf("quads", "hamstrings", "calves"), "glutes" to setOf("glutes"),
 )
 

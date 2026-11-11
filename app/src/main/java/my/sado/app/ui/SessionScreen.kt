@@ -62,7 +62,6 @@ import my.sado.app.data.GiveUp
 import my.sado.app.data.Health
 import my.sado.app.data.HonestRest
 import my.sado.app.data.Integrity
-
 import my.sado.app.data.Catalog
 import my.sado.app.data.ExerciseLog
 import my.sado.app.data.PlanBuilder
@@ -495,7 +494,6 @@ private fun LoadPicker(kg: Float, onChange: (Float) -> Unit) {
 
 @Composable
 private fun TargetCard(target: String, camReps: Int?) {
-
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(SadoColors.Accent.copy(alpha = 0.10f)).border(2.dp, SadoColors.Accent.copy(alpha = 0.4f), RoundedCornerShape(28.dp)).padding(vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

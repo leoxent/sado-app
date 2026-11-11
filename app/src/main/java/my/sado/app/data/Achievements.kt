@@ -17,7 +17,6 @@ object Achievements {
     fun all(s: AppState): List<Achievement> {
         val done = s.logs.filter { it.xp > 0 }
         val reps = s.logs.sumOf { l -> l.exercises.filter { !it.skipped }.sumOf { e -> Integrity.real(e).sumOf { if (Catalog.moves.firstOrNull { m -> m.id == e.id }?.timed == true) 0 else it.reps } } }
-
         val minutes = s.logs.sumOf { it.minutes } + s.sports.sumOf { it.minutes }
         val streak = Progress.streak(s).days
         val stage = Progress.stageFor(s, s.peakXp.coerceAtLeast(s.xp)).index

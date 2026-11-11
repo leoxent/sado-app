@@ -331,7 +331,6 @@ object Progress {
         s.logs.flatMap { it.exercises }.filter { Integrity.real(it).isNotEmpty() }
             .groupBy { it.id }
             .mapNotNull { (id, logs) -> Catalog.moves.firstOrNull { it.id == id }?.let { m -> m to logs.maxOf { l -> Integrity.real(l).maxOf { it.reps } } } }
-
             .sortedByDescending { it.second }
 
     // Double progression. A dose label is a rep range "8–12", a fixed count "15" or seconds "40s";
@@ -356,7 +355,6 @@ object Progress {
     fun top(id: String, d: Dose): Int = when {
         d.timed -> maxOf(d.lo, minOf(d.lo * 2, 120))
         Catalog.moves.firstOrNull { it.id == id }?.weighted == true -> d.hi // past the top of its range a weighted move adds kg, not reps
-
         climbs(id) && d.hi > d.lo -> d.hi
         else -> d.hi + d.hi / 2
     }
@@ -407,7 +405,6 @@ object Progress {
                 sets.any { it.failed } -> 0
                 else -> sets.lastOrNull()?.rir ?: fallbackEffort(log.id, p, sets, history) ?: continue
             }
-
             val key = Catalog.ladderOf(log.id)
             val prog = key?.let { outL[it] } ?: LadderProgress()
             val rungs = key?.let { Catalog.ladders.getValue(it) }
@@ -447,7 +444,6 @@ object Progress {
             ?.exercises?.first { it.id == id && !it.skipped && it.sets.isNotEmpty() } ?: return null
         return if (atTop(Integrity.real(before))) 3 else null
     }
-
 
     // MET values approximate the Compendium of Physical Activities; legs flags sports that load the legs hard
     data class Sport(val name: String, val met: Double, val legs: Boolean)
