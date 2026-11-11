@@ -3,7 +3,7 @@ package my.sado.app.data
 data class Move(
     val id: String,
     val name: String,
-    val group: String, // planner slot: chest, delts, lats, arms, abs, legs, glutes, cardio, warmup
+    val group: String, // planner slot: PlanBuilder.groupNames; lats is for real vertical and horizontal pulls only
     val muscles: List<String>,
     val secondary: List<String> = emptyList(),
     val levels: Set<Int> = setOf(0, 1, 2),
@@ -53,12 +53,12 @@ object Catalog {
         Move("dbrow", "Dumbbell row", "lats", listOf("lats", "biceps"), listOf("traps"), need = "dumbbell", avoid = setOf("back"), tips = listOf("Satu tangan dan lutut atas kerusi.", "Tarik dumbbell ke pinggul.", "Belakang rata, jangan pusing badan.")),
         Move("dbrow2", "Bent-over row", "lats", listOf("lats", "biceps"), listOf("traps", "lowerback"), setOf(1, 2), need = "dumbbell", avoid = setOf("back"), tips = listOf("Bongkok 45°, belakang rata.", "Tarik dua dumbbell ke pinggang.", "Jangan hayun badan.")),
         Move("bprow", "Backpack row", "lats", listOf("lats", "biceps"), listOf("traps"), need = "backpack", avoid = setOf("back"), tips = listOf("Beg isi buku atau botol air, pegang tali.", "Bongkok 45°, belakang lurus.", "Tarik beg ke perut, kepit belikat.")),
-        Move("shrug", "Dumbbell shrug", "lats", listOf("traps"), need = "dumbbell", tips = listOf("Tangan lurus di sisi.", "Angkat bahu ke telinga, tahan 1 saat.", "Jangan pusing bahu.")),
+        Move("shrug", "Dumbbell shrug", "traps", listOf("traps"), need = "dumbbell", tips = listOf("Tangan lurus di sisi.", "Angkat bahu ke telinga, tahan 1 saat.", "Jangan pusing bahu.")),
         Move("bandpull", "Band lat pulldown", "lats", listOf("lats"), listOf("biceps"), need = "band", tips = listOf("Ikat band tinggi, contohnya pintu.", "Tarik siku ke rusuk.", "Dada keluar.")),
         Move("towelrow", "Towel door row", "lats", listOf("lats", "biceps"), listOf("traps", "forearms"), need = "towel", tips = listOf("Sangkut tuala pada tombol kedua-dua belah pintu, kunci pintu.", "Pegang hujung tuala, kaki dekat pintu, condong ke belakang.", "Tarik dada ke pintu, kepit belikat, turun perlahan.")),
         Move("doorrow", "Doorframe row", "lats", listOf("lats", "biceps"), listOf("traps", "forearms"), tips = listOf("Pegang bingkai pintu dengan dua tangan, kaki rapat ke bingkai.", "Condong ke belakang sampai tangan lurus.", "Tarik dada ke bingkai, kepit belikat. Lagi condong, lagi susah.")),
-        Move("superman", "Superman hold", "lats", listOf("lowerback", "glutes"), listOf("lats", "traps"), avoid = setOf("back"), timed = true, tips = listOf("Meniarap, tangan lurus ke depan.", "Angkat tangan, dada dan kaki serentak.", "Tahan, pandang lantai, jangan dongak.")),
-        Move("snow", "Reverse snow angel", "lats", listOf("lats", "traps", "delts"), tips = listOf("Baring meniarap, tangan di sisi.", "Lukis separuh bulatan sampai atas kepala.", "Tangan tak sentuh lantai sepanjang move.")),
+        Move("superman", "Superman hold", "lower_back", listOf("lowerback", "glutes"), listOf("lats", "traps"), avoid = setOf("back"), timed = true, tips = listOf("Meniarap, tangan lurus ke depan.", "Angkat tangan, dada dan kaki serentak.", "Tahan, pandang lantai, jangan dongak.")),
+        Move("snow", "Reverse snow angel", "rear_delts", listOf("delts", "traps"), listOf("lats"), tips = listOf("Baring meniarap, tangan di sisi.", "Lukis separuh bulatan sampai atas kepala.", "Tangan tak sentuh lantai sepanjang move.")),
         Move("chinup", "Chin-up", "arms", listOf("biceps", "lats"), listOf("forearms"), need = "bar", avoid = setOf("shoulder"), minPull = 1, tips = listOf("Genggam tapak tangan menghadap kau.", "Tarik dagu atas bar.", "Turun penuh.")),
         Move("diamond", "Diamond push-up", "arms", listOf("triceps", "chest"), levels = setOf(2), avoid = setOf("shoulder"), wger = "Diamond push ups", tips = listOf("Tangan rapat bentuk berlian bawah dada.", "Siku rapat ke badan.", "Turun sampai dada sentuh tangan.")),
         Move("dips", "Chair dips", "arms", listOf("triceps"), listOf("chest", "delts"), need = "chair", avoid = setOf("shoulder"), wger = "Dips", tips = listOf("Tangan di hujung kerusi, jari ke depan.", "Turun sampai siku 90°, bahu jauh dari telinga.", "Tolak naik guna trisep, bukan kaki.")),

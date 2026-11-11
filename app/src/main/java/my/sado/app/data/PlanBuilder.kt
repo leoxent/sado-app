@@ -8,9 +8,11 @@ object PlanBuilder {
         "vshape" to "V-shape", "aesthetic" to "Aesthetic", "bulk" to "Besar & kuat", "athletic" to "Atletik", "lean" to "Kurus & tone", "shredded" to "Shredded",
     )
     val groupNames = mapOf(
-        "chest" to "Dada", "delts" to "Bahu", "lats" to "Belakang", "arms" to "Lengan", "abs" to "Perut",
-        "legs" to "Kaki", "glutes" to "Punggung", "cardio" to "Kardio",
+        "chest" to "Dada", "delts" to "Bahu", "rear_delts" to "Bahu belakang", "lats" to "Belakang", "traps" to "Trapezius",
+        "lower_back" to "Pinggang", "arms" to "Lengan", "abs" to "Perut", "legs" to "Kaki", "glutes" to "Punggung", "cardio" to "Kardio",
     )
+    // small helpers, not what a shape is built from: without a rating or a shape asking for them they get only a little weight
+    private val baseWeight = mapOf("rear_delts" to 3.0, "traps" to 1.5, "lower_back" to 1.5)
     private val profiles = mapOf(
         "vshape" to mapOf("lats" to 35.0, "delts" to 30.0, "abs" to 15.0, "legs" to 10.0, "chest" to 10.0),
         "aesthetic" to mapOf("chest" to 18.0, "delts" to 18.0, "abs" to 18.0, "lats" to 16.0, "arms" to 14.0, "legs" to 10.0, "glutes" to 6.0),
@@ -104,12 +106,12 @@ object PlanBuilder {
 
     // muscle groups each day type trains; a tag not listed works the whole body
     private val tagGroups = mapOf(
-        "Pull" to listOf("lats", "delts", "arms", "abs"),
+        "Pull" to listOf("lats", "delts", "rear_delts", "arms", "abs", "traps"),
         "Push" to listOf("chest", "delts", "arms", "abs"),
         "Legs+Push" to listOf("legs", "glutes", "chest", "delts"),
-        "Legs+Core" to listOf("legs", "glutes", "abs", "cardio"),
-        "Upper" to listOf("chest", "delts", "lats", "arms", "abs"),
-        "Lower" to listOf("legs", "glutes", "abs", "cardio"),
+        "Legs+Core" to listOf("legs", "glutes", "abs", "lower_back", "cardio"),
+        "Upper" to listOf("chest", "delts", "lats", "rear_delts", "arms", "abs", "traps"),
+        "Lower" to listOf("legs", "glutes", "abs", "lower_back", "cardio"),
         "Power" to listOf("legs", "glutes", "chest", "lats", "abs"),
     )
     val tagLabels = mapOf(
@@ -223,7 +225,7 @@ object PlanBuilder {
         a.shape.forEach { s -> profiles.getValue(s).forEach { (g, v) -> w[g] = (w[g] ?: 0.0) + v / a.shape.size } }
         if (a.body == "heavy") w["cardio"] = (w["cardio"] ?: 0.0) + 12
         if (a.body == "skinny" && w.containsKey("cardio")) w["cardio"] = maxOf(0.0, w.getValue("cardio") - 12)
-        groupNames.keys.filter { it != "cardio" }.forEach { g -> w[g] = ((w[g] ?: 0.0) + 5.0) * ratingScale[rating(a, g) - 1] }
+        groupNames.keys.filter { it != "cardio" }.forEach { g -> w[g] = ((w[g] ?: 0.0) + (baseWeight[g] ?: 5.0)) * ratingScale[rating(a, g) - 1] }
 
         // weekly set targets: the week's sets shared by weight, every focus group lifted to its floor first
         val n = mapOf(10 to 3, 20 to 4, 30 to 5, 45 to 6).getValue(a.time)
@@ -279,7 +281,7 @@ object PlanBuilder {
         if (a.body == "skinny") why += "Kardio dikurangkan. Makan lebih sikit dari biasa supaya otot naik."
         val gear = a.equip - "bar"
         if (a.pull < 0 && gear.isEmpty()) {
-            why += "Tanpa alat langsung: plan guna berat badan, lantai dan bingkai pintu. Belakang train guna doorframe row dan superman."
+            why += "Tanpa alat langsung: plan guna berat badan, lantai dan bingkai pintu. Belakang train guna doorframe row; superman untuk pinggang."
             why += "Kalau nak beli satu benda je, ambil pull-up bar pintu (RM40–80): paling banyak buka move untuk belakang dan lengan."
         } else if (a.pull < 0 && (has("vshape") || rating(a, "lats") >= 4)) {
             why += "Takde pull-up bar: belakang train guna " + when {

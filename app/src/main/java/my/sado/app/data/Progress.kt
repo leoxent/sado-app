@@ -302,7 +302,7 @@ object Progress {
     }
 
     val muscleGroups = linkedMapOf(
-        "Belakang" to setOf("lats", "traps"), "Bahu" to setOf("delts"), "Dada" to setOf("chest"),
+        "Belakang" to setOf("lats"), "Bahu" to setOf("delts", "traps"), "Dada" to setOf("chest"),
         "Lengan" to setOf("biceps", "triceps", "forearms"), "Perut" to setOf("abs", "obliques", "lowerback"),
         "Kaki" to setOf("quads", "hamstrings", "calves", "glutes"),
     )
