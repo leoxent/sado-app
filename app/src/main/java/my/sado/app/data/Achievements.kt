@@ -29,6 +29,14 @@ object Achievements {
         // share of the starting weight lost, in tenths of a percent: 5% already lowers blood pressure and sugar
         val lostPct = s.weights.takeIf { it.size >= 2 }?.let { w -> ((w.first().kg - w.minOf { it.kg }) / w.first().kg * 1000).roundToInt().coerceAtLeast(0) } ?: 0
         val petTop = s.pets.maxOfOrNull { Pets.stage(it) } ?: -1
+        // on a bulk the weight is meant to go up: those badges count kilos gained instead of lost
+        val gaining = s.profile?.let { Nutrition.targets(s, it).mode == "Lean bulk" } == true
+        val gained = s.weights.takeIf { it.size >= 2 }?.let { ((it.maxOf { w -> w.kg } - it.first().kg) * 10).roundToInt().coerceAtLeast(0) } ?: 0
+        val gainedPct = s.weights.takeIf { it.size >= 2 }?.let { w -> ((w.maxOf { it.kg } - w.first().kg) / w.first().kg * 1000).roundToInt().coerceAtLeast(0) } ?: 0
+        // strength firsts from real sets in the logs (flagged sets don't count) or the fitness test
+        val best = { ids: Set<String> -> s.logs.flatMap { it.exercises }.filter { it.id in ids && !it.skipped }.flatMap { Integrity.real(it) }.maxOfOrNull { it.reps } ?: 0 }
+        val fullPush = maxOf(best(setOf("push", "decline", "archer", "onearm", "wpush", "tempopush", "wide", "closepush", "diamond")), maxPush)
+        val pulls = maxOf(best(setOf("pullup", "chinup", "archerpull", "wpullup")), s.tests.maxOfOrNull { it.pullups ?: 0 } ?: 0)
 
         fun a(id: String, group: String, title: String, desc: String, icon: String, goal: Int, progress: Int) = Achievement(id, group, title, desc, icon, goal, progress)
         val stageName = { i: Int -> Progress.stagesFor(s)[i].name }
@@ -49,10 +57,13 @@ object Achievements {
             a("s365", "Konsisten", "Setahun penuh", "Streak 365 hari", "flame", 365, streak),
             a("back", "Konsisten", "Comeback", "Balik workout lepas rehat lama", "heart", 1, s.logs.count { it.bonus > 0 }),
 
-            a("pullup", "Kekuatan", "Pull-up pertama", "Naik ladder tarik sampai pull-up", "flex", 2, rung("pull")),
+            a("push1", "Kekuatan", "Push-up penuh pertama", "Satu push-up penuh, lutut tak sentuh lantai", "flex", 1, fullPush),
+            a("pullup", "Kekuatan", "Pull-up pertama", "Satu pull-up penuh, dagu lepas bar", "flex", 2, maxOf(rung("pull"), if (pulls >= 1) 2 else 0)),
+            a("pull10", "Kekuatan", "10 pull-up", "10 pull-up dalam satu set", "flex", 10, pulls),
+            a("archer1", "Kekuatan", "Archer push-up pertama", "Set pertama archer push-up", "flex", 1, best(setOf("archer")).coerceAtMost(1)),
             a("decline", "Kekuatan", "Push-up kaki atas", "Naik ladder tolak sampai decline push-up", "flex", 2, rung("push")),
             a("onearm", "Kekuatan", "Satu tangan", "Sampai one-arm push-up", "flex", 4, rung("push")),
-            a("pistol", "Kekuatan", "Pistol squat", "Sampai pistol squat", "flex", 3, rung("squat")),
+            a("pistol", "Kekuatan", "Pistol squat pertama", "Satu pistol squat penuh", "flex", 3, maxOf(rung("squat"), if (best(setOf("pistol", "wpistol")) >= 1) 3 else 0)),
             a("push30", "Kekuatan", "30 push-up", "30 push-up dalam ujian kecergasan", "star", 30, maxPush),
             a("plank2", "Kekuatan", "Plank 2 minit", "Plank 120 saat dalam ujian", "timer", 120, maxPlank),
 
@@ -65,8 +76,11 @@ object Achievements {
             a("photo1", "Badan & makan", "Gambar pertama", "Ambil gambar progress pertama", "camera", 1, s.photos.size),
             a("photo12", "Badan & makan", "Album transformasi", "12 gambar progress", "camera", 12, s.photos.size),
             a("weigh4", "Badan & makan", "Rajin timbang", "Log berat 4 kali", "steps", 4, s.weights.size),
-            a("lost2", "Badan & makan", "Turun 2 kg", "Berat turun 2 kg dari log pertama", "steps", 20, lost),
-            *(if (Progress.heavyPath(s)) arrayOf(
+            *(if (gaining) arrayOf(
+                a("gain2", "Badan & makan", "Naik 2 kg", "Berat naik 2 kg dari log pertama. Bulk berjalan!", "steps", 20, gained),
+                a("gain5p", "Badan & makan", "Naik 5%", "Berat naik 5% dari log pertama", "steps", 50, gainedPct),
+            ) else arrayOf(a("lost2", "Badan & makan", "Turun 2 kg", "Berat turun 2 kg dari log pertama", "steps", 20, lost))),
+            *(if (Progress.heavyPath(s) && !gaining) arrayOf(
                 a("lost5p", "Badan & makan", "Turun 5%", "Berat turun 5% dari log pertama. Tekanan darah dan gula pun ikut turun.", "steps", 50, lostPct),
                 a("lost10p", "Badan & makan", "Turun 10%", "Berat turun 10% dari log pertama", "steps", 100, lostPct),
             ) else emptyArray()),
