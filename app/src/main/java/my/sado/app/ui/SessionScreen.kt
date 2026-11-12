@@ -743,8 +743,21 @@ fun DoneScreen(onHome: () -> Unit) {
 private fun SummaryCard(log: WorkoutLog, earlier: List<WorkoutLog>) {
     val rows = remember(log) { SessionSummary.rows(log, earlier) }
     if (rows.isEmpty()) return
+    // muscles by the sets that counted; helpers count half, as on the plan
+    val worked = remember(log) { Heat.sets(log.exercises.filter { !it.skipped }.map { it.id to Integrity.real(it).size }.filter { it.second > 0 }) }
     Card {
         Text("Ringkasan sesi", color = SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+        if (worked.isNotEmpty()) {
+            val top = worked.entries.sortedByDescending { it.value }.take(4).map { it.key }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.weight(0.9f)) { BodyHeat(worked, week = false, height = 140, labels = false) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Otot dilatih", color = SadoColors.Text, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(top.joinToString(", ") { Catalog.muscleNames[it] ?: it }, color = SadoColors.TextMuted, fontSize = 13.sp)
+                }
+            }
+            HeatLegend(week = false)
+        }
         rows.forEach { r ->
             Column(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
