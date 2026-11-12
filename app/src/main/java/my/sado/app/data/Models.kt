@@ -118,6 +118,8 @@ data class WorkoutLog(
     val hr: List<HrPoint> = emptyList(), // readings during the session, from the broadcast or Health Connect
     val hrSource: String? = null, // "Broadcast" or "Health Connect"
     val restingHr: Int? = null, // resting HR when the readings came in, for the zones
+    val climbed: Map<String, String> = emptyMap(), // ladder rungs this session earned: move done to the next move
+    val kgNext: Map<String, Float> = emptyMap(), // weighted moves whose load went up: move to its next kg
 )
 
 @Serializable

@@ -87,6 +87,22 @@ class ScreensTest {
     @Test fun doneZero() = shot("donezero", { Store.update { it.copy(logs = it.logs + WorkoutLog(LocalDate.now().toEpochDay(), "Push day", 3, listOf(ExerciseLog("push", emptyList(), true)), 0, false)) } }) {
         DoneScreen(onHome = {})
     }
+    @Test fun doneSummary() = shot("donesummary", {
+        Store.update {
+            val today = LocalDate.now().toEpochDay()
+            it.copy(logs = it.logs + WorkoutLog(today - 3, "Push day", 20, listOf(ExerciseLog("push", listOf(SetLog(12), SetLog(10)))), 30, false) +
+                WorkoutLog(
+                    today, "Push day", 22,
+                    listOf(
+                        ExerciseLog("push", listOf(SetLog(14), SetLog(12), SetLog(10))),
+                        ExerciseLog("plank", listOf(SetLog(40), SetLog(40))),
+                        ExerciseLog("lateral", listOf(SetLog(12, flagged = true), SetLog(10))),
+                        ExerciseLog("squat", emptyList(), true),
+                    ),
+                    40, false, climbed = mapOf("push" to "decline"),
+                ))
+        }
+    }) { DoneScreen(onHome = {}) }
     @Test fun squatPic() = shot("squatpic") { my.sado.app.ui.ExerciseDetailScreen("squat") {} }
     @Test fun session() = shot("session") { my.sado.app.ui.SessionScreen("plan", {}, {}, {}) }
     @Test fun sessionLong() = shot("sessionlong", { my.sado.app.data.Store.update { s -> s.copy(plan = s.plan?.mapExercises { ex -> listOf(ex.first().copy(id = "kneeraise")) + ex.drop(1) }) } }) {

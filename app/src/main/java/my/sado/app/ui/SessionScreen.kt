@@ -61,6 +61,7 @@ import my.sado.app.data.Burn
 import my.sado.app.data.GiveUp
 import my.sado.app.data.Health
 import my.sado.app.data.HrAnalysis
+import my.sado.app.data.SessionSummary
 import my.sado.app.data.HonestRest
 import my.sado.app.data.Integrity
 import my.sado.app.data.Catalog
@@ -224,7 +225,8 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 logs = s.logs + WorkoutLog(
                     LocalDate.now().toEpochDay(), title, minutes, all, xp + bonus, p.quit, p.avg, p.hr.maxOfOrNull { it.bpm }, bonus,
                     seconds = seconds, kcal = kcal, kcalSource = kcalSource, startMs = startedAt, endMs = end, doubtful = accepted, mini = mini,
-                ).let { if (p.hr.size >= HrAnalysis.MIN_POINTS) HrAnalysis.withHr(it, p.hr, "Broadcast", restingHr, s.profile) else it },
+                ).let { if (p.hr.size >= HrAnalysis.MIN_POINTS) HrAnalysis.withHr(it, p.hr, "Broadcast", restingHr, s.profile) else it }
+                    .let { SessionSummary.ups(s.ladders, c.ladders, s.loads, c.loads, all).let { u -> it.copy(climbed = u.climbed, kgNext = u.kgNext) } },
                 ladders = c.ladders,
                 boosts = c.boosts,
                 loads = c.loads,
@@ -727,10 +729,46 @@ fun DoneScreen(onHome: () -> Unit) {
                 )
             }
         }
+        SummaryCard(log, s.logs.dropLast(1))
         HrReportCard(log, waiting = s.settings.healthConnect)
         NewAchievements(fresh)
         PrimaryButton("BALIK KE HOME", onClick = onHome)
     }
     if (!zero) Confetti()
+    }
+}
+
+/** Per move: what was done, a record, the change since last time, sets that didn't count, and what goes up next. */
+@Composable
+private fun SummaryCard(log: WorkoutLog, earlier: List<WorkoutLog>) {
+    val rows = remember(log) { SessionSummary.rows(log, earlier) }
+    if (rows.isEmpty()) return
+    Card {
+        Text("Ringkasan sesi", color = SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+        rows.forEach { r ->
+            Column(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(r.name, color = if (r.skipped) SadoColors.TextMuted else SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text(if (r.skipped) "skip" else r.sets, color = if (r.skipped) SadoColors.Streak else SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                val notes = buildList {
+                    if (r.pr) add("\uD83C\uDFC6 Rekod baru")
+                    if (r.first) add("Kali pertama")
+                    r.delta?.let { d -> if (d != 0) add((if (d > 0) "+" else "") + "$d berbanding sesi lepas") else add("Sama macam sesi lepas") }
+                    if (r.flagged > 0) add("${r.flagged} set terlalu laju, tak dikira")
+                }
+                if (notes.isNotEmpty()) Text(
+                    notes.joinToString(" · "),
+                    color = when { r.pr -> SadoColors.Accent; r.flagged > 0 -> SadoColors.Streak; else -> SadoColors.TextMuted },
+                    fontSize = 12.sp, fontWeight = if (r.pr) FontWeight.ExtraBold else FontWeight.Normal,
+                )
+            }
+        }
+        val name = { id: String -> Catalog.moves.firstOrNull { it.id == id }?.name ?: id }
+        if (log.climbed.isNotEmpty() || log.kgNext.isNotEmpty()) {
+            Text("Naik lepas ni", color = SadoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+            log.climbed.forEach { (from, to) -> Text("${name(from)} \u2192 ${name(to)}", color = SadoColors.Text, fontSize = 13.sp) }
+            log.kgNext.forEach { (id, k) -> Text("${name(id)}: tambah berat ke ${if (k % 1f == 0f) k.toInt() else k} kg", color = SadoColors.Text, fontSize = 13.sp) }
+        }
     }
 }
