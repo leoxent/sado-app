@@ -301,8 +301,12 @@ private fun HeartRateCard() {
                 if (bpm != null) LiveHr()
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecondaryButton("Sambung semula", Modifier.weight(1f), color = SadoColors.Accent) {
-                    withPermission { HeartRate.connect(context, s.settings.hrDevice) }
+                if (status == HeartRate.Status.Connected || status == HeartRate.Status.Connecting) {
+                    SecondaryButton("Putuskan", Modifier.weight(1f), color = SadoColors.Accent) { HeartRate.disconnect() }
+                } else {
+                    SecondaryButton("Sambung semula", Modifier.weight(1f), color = SadoColors.Accent) {
+                        withPermission { HeartRate.connect(context, s.settings.hrDevice) }
+                    }
                 }
                 SecondaryButton("Lupakan", Modifier.weight(1f)) {
                     HeartRate.disconnect()
