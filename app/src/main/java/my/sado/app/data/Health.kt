@@ -54,6 +54,11 @@ object Health {
     suspend fun granted(context: Context): Set<String> =
         if (!available(context)) emptySet() else runCatching { client(context).permissionController.getGrantedPermissions() }.getOrDefault(emptySet())
 
+    /** Takes back every permission Sado was given, so the next "Benarkan akses" starts fresh. */
+    suspend fun disconnect(context: Context) {
+        if (available(context)) runCatching { client(context).permissionController.revokeAllPermissions() }
+    }
+
     private fun zone() = ZoneId.systemDefault()
     private fun startOf(day: LocalDate): Instant = day.atStartOfDay(zone()).toInstant()
 

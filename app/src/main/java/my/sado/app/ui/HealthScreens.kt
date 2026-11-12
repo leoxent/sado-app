@@ -38,6 +38,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.HealthConnectClient
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.health.connect.client.PermissionController
 import my.sado.app.HeartRate
 import my.sado.app.data.HcSession
@@ -51,12 +56,26 @@ import java.time.LocalDate
 
 private fun fmt(n: Long) = "%,d".format(n)
 
-/** Today's Health Connect numbers; recomputed whenever [key] changes. */
+/** Counts each time the screen comes back to the front, so reads made on it can run again. */
+@Composable
+fun rememberResumes(): Int {
+    val owner = LocalLifecycleOwner.current
+    var n by remember { mutableIntStateOf(0) }
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) n++ }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    return n
+}
+
+/** Today's Health Connect numbers; read again whenever [key] changes or the app comes back to the front. */
 @Composable
 fun rememberHealthToday(key: Any = Unit): HealthToday {
     val context = LocalContext.current
     val enabled = Store.state.collectAsState().value.settings.healthConnect
-    return produceState(HealthToday(), key, enabled) { if (enabled) value = Health.today(context) }.value
+    val resumes = rememberResumes()
+    return produceState(HealthToday(), key, enabled, resumes) { if (enabled) value = Health.today(context) }.value
 }
 
 /** Compact strip for Home: steps, burned kcal and resting HR from the watch. */
@@ -81,8 +100,11 @@ fun SleepPicker() {
     val s = Store.state.collectAsState().value
     val today = LocalDate.now().toEpochDay()
     val entry = s.sleep.lastOrNull { it.epochDay == today }
-    LaunchedEffect(s.settings.healthConnect) {
-        if (entry == null && s.settings.healthConnect) Health.lastNightSleep(context)?.let { h -> saveSleep(h, "Health Connect") }
+    val resumes = rememberResumes()
+    // the watch's figure keeps updating as Garmin syncs; a sleep the user answered is left alone
+    LaunchedEffect(s.settings.healthConnect, resumes) {
+        if (s.settings.healthConnect && (entry == null || entry.source == "Health Connect"))
+            Health.lastNightSleep(context)?.let { h -> if (entry == null || kotlin.math.abs(entry.hours - h) > 0.05f) saveSleep(h, "Health Connect") }
     }
     val pick = entry?.hours?.let { if (it < 6f) 0 else if (it < 7f) 1 else 2 }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -133,6 +155,7 @@ fun HealthScreen(onBack: () -> Unit) {
     val granted by produceState(emptySet<String>(), refresh) { value = Health.granted(context) }
     val h = rememberHealthToday(refresh to granted.size)
     val sessions by produceState(emptyList<HcSession>(), refresh, granted.size) { value = if (granted.isNotEmpty()) Health.sessions(context) else emptyList() }
+    val scope = rememberCoroutineScope()
     val askHealth = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { got ->
         Store.update { it.copy(settings = it.settings.copy(healthConnect = got.isNotEmpty())) }
         refresh++
@@ -193,6 +216,17 @@ fun HealthScreen(onBack: () -> Unit) {
                     color = SadoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
                     modifier = Modifier.clickable { askHealth.launch(Health.permissions) },
                 )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SecondaryButton("Muat semula", Modifier.weight(1f), color = SadoColors.Accent) { refresh++; Feedback.tap() }
+                    SecondaryButton("Putuskan", Modifier.weight(1f)) {
+                        scope.launch {
+                            Health.disconnect(context)
+                            Store.update { it.copy(settings = it.settings.copy(healthConnect = false)) }
+                            refresh++
+                        }
+                    }
+                }
 
                 Label("Import sukan (7 hari)")
                 val imported = s.sports.mapNotNull { it.hcId }.toSet()
