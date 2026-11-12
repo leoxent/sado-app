@@ -8,6 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +49,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.health.connect.client.PermissionController
 import my.sado.app.HeartRate
 import my.sado.app.data.HcSession
+import my.sado.app.data.HrAnalysis
+import my.sado.app.data.HrPoint
+import my.sado.app.data.WorkoutLog
+import my.sado.app.data.Catalog
 import my.sado.app.data.Health
 import my.sado.app.data.HealthToday
 import my.sado.app.data.Progress
@@ -81,15 +88,98 @@ fun rememberHealthToday(key: Any = Unit): HealthToday {
 /** Compact strip for Home: steps, burned kcal and resting HR from the watch. */
 @Composable
 fun HealthStrip(onClick: () -> Unit) {
+    val context = LocalContext.current
+    val s = Store.state.collectAsState().value
     val h = rememberHealthToday()
-    if (h.steps == null && h.totalKcal == null && h.restingHr == null) return
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface).clickable { onClick() }.padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
+    val resumes = rememberResumes()
+    // newest reading and resting rate for the heart line; recent sessions pick up their heart rate here too
+    val live by produceState<Pair<HrPoint?, Int?>>(null to null, resumes, s.settings.healthConnect) {
+        if (s.settings.healthConnect) value = runCatching { Health.latestHr(context) to Health.restingEstimate(context) }.getOrDefault(null to null)
+    }
+    LaunchedEffect(resumes, s.settings.healthConnect) { runCatching { HrAnalysis.backfill(context) } }
+    val (pt, resting) = live
+    if (pt == null && h.steps == null && h.totalKcal == null) return
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface).clickable { onClick() }.padding(vertical = 12.dp, horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Stat(h.steps?.let { fmt(it) } ?: "–", "langkah")
-        Stat(h.totalKcal?.toString() ?: "–", "kcal dibakar", SadoColors.Streak)
-        Stat(h.restingHr?.toString() ?: h.avgHr?.toString() ?: "–", if (h.restingHr != null) "Resting HR" else "HR purata")
+        if (pt != null) {
+            val ago = System.currentTimeMillis() - pt.t
+            val st = HrAnalysis.state(pt.bpm, resting, s.profile?.age ?: 25)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("❤️ ${pt.bpm} bpm", color = SadoColors.Text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                if (ago > HrAnalysis.STALE_MS) Text("data lama · buka Garmin Connect", color = SadoColors.TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                else {
+                    Text(st.label, color = stateColor(st), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(agoText(ago), color = SadoColors.TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+            Stat(h.steps?.let { fmt(it) } ?: "–", "langkah")
+            Stat(h.totalKcal?.toString() ?: "–", "kcal dibakar", SadoColors.Streak)
+            Stat(resting?.toString() ?: "–", "Resting HR")
+        }
+    }
+}
+
+private fun stateColor(st: HrAnalysis.State) = when (st) {
+    HrAnalysis.State.Rest -> SadoColors.Sky
+    HrAnalysis.State.Active -> SadoColors.Accent
+    HrAnalysis.State.Workout -> SadoColors.Streak
+}
+
+private fun agoText(ms: Long): String {
+    val min = ms / 60_000
+    return when { min < 1 -> "baru tadi"; min < 60 -> "$min min lepas"; else -> "${min / 60} jam lepas" }
+}
+
+/** A session's heart rate: average and peak, time in each state, and per set when the readings are dense enough. */
+@Composable
+fun HrReportCard(log: WorkoutLog, waiting: Boolean) {
+    val p = Store.state.collectAsState().value.profile
+    val r = HrAnalysis.analyze(log.hr, log.exercises, log.restingHr, p?.age ?: 25)
+    if (r == null) {
+        if (waiting && log.startMs != null) Card {
+            Text("Heart rate", color = SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+            Text(
+                "Menunggu data jam. Stop aktiviti kat jam dan buka Garmin Connect untuk sync, lepas tu Sado isi analisis sendiri.",
+                color = SadoColors.TextMuted, fontSize = 13.sp,
+            )
+        }
+        return
+    }
+    Card {
+        Text(
+            "Heart rate · " + if (log.hrSource == "Broadcast") "live dari jam" else "dari Health Connect",
+            color = SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+            Stat("${r.avg}", "HR purata")
+            Stat("${r.max}", "Max HR", SadoColors.Danger)
+            r.rose?.let { Stat(if (it) "✓" else "✗", "HR naik", if (it) SadoColors.Accent else SadoColors.Danger) }
+        }
+        val states = HrAnalysis.State.entries
+        if (r.zones.values.sum() > 0) Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp))) {
+            states.forEach { st -> val v = r.zones[st] ?: 0; if (v > 0) Box(Modifier.weight(v.toFloat()).fillMaxHeight().background(stateColor(st))) }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+            states.forEach { st -> Text("${st.label} ${((r.zones[st] ?: 0) + 30) / 60} min", color = stateColor(st), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+        }
+        if (r.rose == false) Text("HR hampir tak naik dari rehat, jadi sesi ni ditanda meragukan.", color = SadoColors.Streak, fontSize = 13.sp)
+        if (r.dense && r.sets.isNotEmpty()) {
+            Text("Setiap set", color = SadoColors.Text, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+            r.sets.forEach { st ->
+                Row(Modifier.fillMaxWidth()) {
+                    Text("${runCatching { Catalog.get(st.move).name }.getOrDefault(st.move)} · set ${st.set}", color = SadoColors.TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("${st.peak} bpm" + (st.drop?.let { " · turun $it" } ?: ""), color = SadoColors.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Text("Turun = berapa banyak HR jatuh seminit lepas set. Lagi besar, lagi cepat badan pulih.", color = SadoColors.TextMuted, fontSize = 12.sp)
+        } else if (!r.dense) Text(
+            "Data jarang (${r.points} bacaan). Start Strength kat jam masa workout untuk analisis setiap set.",
+            color = SadoColors.TextMuted, fontSize = 12.sp,
+        )
     }
 }
 
@@ -245,8 +335,21 @@ fun HealthScreen(onBack: () -> Unit) {
             }
         }
 
-        Label("Heart rate live")
-        HeartRateCard()
+        Label("HR masa workout")
+        Segmented(listOf("Strength mode", "Broadcast"), s.settings.hrMode.coerceIn(0, 1)) { i ->
+            Store.update { it.copy(settings = it.settings.copy(hrMode = i)) }
+            if (i == 0) HeartRate.disconnect()
+        }
+        Text(
+            if (s.settings.hrMode == 0) "Start Strength kat jam masa workout. Lepas Garmin sync, Sado isi analisis HR sendiri. Tak makan bateri lebih, takde pairing. Perlukan Health Connect di atas."
+            else "On Broadcast Heart Rate kat jam (paling senang: dalam setting aktiviti Strength). HR live masa sesi dan analisis terus lepas sesi. Makan bateri jam masa broadcast.",
+            color = SadoColors.TextMuted, fontSize = 13.sp,
+        )
+        if (s.settings.hrMode == 1) HeartRateCard()
+        s.logs.lastOrNull()?.let { last ->
+            Label("Sesi terakhir · ${last.title}")
+            HrReportCard(last, waiting = s.settings.healthConnect)
+        }
     }
 }
 

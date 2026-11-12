@@ -87,7 +87,12 @@ data class SetLog(
     val at: Int? = null, // seconds into the session when the set was done
     val restSkipped: Boolean = false, // the rest after this set was cut well short
     val flagged: Boolean = false, // too quick to be real (Integrity); left out of progression and volume
+    val endMs: Long? = null, // wall clock when Set done was pressed, to line the set up with heart rate
 )
+
+/** One heart-rate reading: wall clock and beats per minute. */
+@Serializable
+data class HrPoint(val t: Long, val bpm: Int)
 
 @Serializable
 data class ExerciseLog(val id: String, val sets: List<SetLog> = emptyList(), val skipped: Boolean = false)
@@ -110,6 +115,9 @@ data class WorkoutLog(
     val endMs: Long? = null,
     val doubtful: Boolean = false, // the quick-session check fired and the user said they did it
     val mini: Boolean = false, // Sesi mini: one set per move, counts for streak and pet but not progression
+    val hr: List<HrPoint> = emptyList(), // readings during the session, from the broadcast or Health Connect
+    val hrSource: String? = null, // "Broadcast" or "Health Connect"
+    val restingHr: Int? = null, // resting HR when the readings came in, for the zones
 )
 
 @Serializable
@@ -128,6 +136,7 @@ data class Settings(
     val appLock: Boolean = false,
     val foodAi: Boolean = true,
     val healthConnect: Boolean = false,
+    val hrMode: Int = 0, // heart rate during a workout: 0 Strength mode on the watch (Health Connect after sync), 1 Broadcast live
     val hrDevice: String? = null, // MAC of the watch broadcasting heart rate over BLE
     val hrDeviceName: String? = null,
     val cameraReps: Boolean = false,

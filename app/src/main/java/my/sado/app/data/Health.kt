@@ -54,6 +54,47 @@ object Health {
     suspend fun granted(context: Context): Set<String> =
         if (!available(context)) emptySet() else runCatching { client(context).permissionController.getGrantedPermissions() }.getOrDefault(emptySet())
 
+    /** Every heart-rate reading between two moments, oldest first. */
+    suspend fun heartRate(context: Context, startMs: Long, endMs: Long): List<HrPoint> = runCatching {
+        if (!available(context) || endMs <= startMs) return emptyList()
+        val c = client(context)
+        val out = mutableListOf<HrPoint>()
+        var token: String? = null
+        do {
+            val res = c.readRecords(
+                ReadRecordsRequest(HeartRateRecord::class, TimeRangeFilter.between(Instant.ofEpochMilli(startMs), Instant.ofEpochMilli(endMs)), pageToken = token)
+            )
+            res.records.forEach { r -> r.samples.forEach { p -> val t = p.time.toEpochMilli(); if (t in startMs..endMs) out += HrPoint(t, p.beatsPerMinute.toInt()) } }
+            token = res.pageToken
+        } while (token != null)
+        out.sortedBy { it.t }.distinctBy { it.t }
+    }.getOrDefault(emptyList())
+
+    /** The newest reading of the last 6 hours. */
+    suspend fun latestHr(context: Context): HrPoint? {
+        val now = System.currentTimeMillis()
+        return heartRate(context, now - 6 * 3_600_000L, now).lastOrNull()
+    }
+
+    /**
+     * Resting heart rate. Garmin doesn't share its own with Health Connect, so when no app wrote one, it is the lowest
+     * 10-minute average of last night, or else the week's lowest reading.
+     */
+    suspend fun restingEstimate(context: Context): Int? {
+        if (!available(context)) return null
+        val c = client(context)
+        val now = Instant.now()
+        runCatching {
+            c.aggregate(AggregateRequest(setOf(RestingHeartRateRecord.BPM_AVG), TimeRangeFilter.between(now.minusSeconds(3 * 86_400L), now)))[RestingHeartRateRecord.BPM_AVG]
+        }.getOrNull()?.let { return it.toInt() }
+        val from = LocalDate.now().minusDays(1).atTime(18, 0).atZone(zone()).toInstant().toEpochMilli()
+        val to = minOf(LocalDate.now().atTime(14, 0).atZone(zone()).toInstant().toEpochMilli(), now.toEpochMilli())
+        HrAnalysis.lowestWindow(heartRate(context, from, to))?.let { return it }
+        return runCatching {
+            c.aggregate(AggregateRequest(setOf(HeartRateRecord.BPM_MIN), TimeRangeFilter.between(now.minusSeconds(7 * 86_400L), now)))[HeartRateRecord.BPM_MIN]
+        }.getOrNull()?.toInt()?.let { it + 3 } // a single lowest beat sits a little under a true resting rate
+    }
+
     /** Takes back every permission Sado was given, so the next "Benarkan akses" starts fresh. */
     suspend fun disconnect(context: Context) {
         if (available(context)) runCatching { client(context).permissionController.revokeAllPermissions() }

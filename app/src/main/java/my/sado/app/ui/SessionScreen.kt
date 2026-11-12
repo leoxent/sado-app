@@ -60,6 +60,7 @@ import my.sado.app.data.AppState
 import my.sado.app.data.Burn
 import my.sado.app.data.GiveUp
 import my.sado.app.data.Health
+import my.sado.app.data.HrAnalysis
 import my.sado.app.data.HonestRest
 import my.sado.app.data.Integrity
 import my.sado.app.data.Catalog
@@ -121,7 +122,9 @@ fun sessionFor(source: String, quizGear: Boolean = false): Pair<String, List<Pla
 private var pausedAt = 0L
 private var pausedSession = 0L
 
-private class Pending(val quit: Boolean, val logs: List<ExerciseLog>, val hr: Pair<Int, Int>?, val verdict: Integrity.Verdict)
+private class Pending(val quit: Boolean, val logs: List<ExerciseLog>, val hr: List<my.sado.app.data.HrPoint>, val verdict: Integrity.Verdict) {
+    val avg get() = hr.takeIf { it.isNotEmpty() }?.map { it.bpm }?.average()?.toInt()
+}
 
 @Composable
 fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -> Unit, onExit: () -> Unit, onMini: () -> Unit = {}) {
@@ -136,14 +139,14 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
     DisposableEffect(Unit) {
         if (pausedAt > 0 && pausedSession == startedAt) pausedMs += System.currentTimeMillis() - pausedAt
         pausedAt = 0
-        settings.hrDevice?.let { if (HeartRate.hasPermissions(context)) HeartRate.connect(context, it) }
+        if (settings.hrMode == 1) settings.hrDevice?.let { if (HeartRate.hasPermissions(context)) HeartRate.connect(context, it) }
         if (hrStarted) HeartRate.resume() else { HeartRate.startRecording(); hrStarted = true }
         onDispose { HeartRate.pause(); pausedAt = System.currentTimeMillis(); pausedSession = startedAt }
     }
     // resting heart rate from Health Connect, for the flat-HR check
     var restingHr by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(Unit) {
-        if (settings.healthConnect) restingHr = withContext(Dispatchers.IO) { runCatching { if (Health.available(context)) Health.today(context).restingHr else null }.getOrNull() }
+        if (settings.healthConnect) restingHr = withContext(Dispatchers.IO) { runCatching { Health.restingEstimate(context) }.getOrNull() }
     }
     if (initial.isEmpty()) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -209,7 +212,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
         val minutes = (seconds / 60).coerceAtLeast(1)
         // said yes but the watch barely moved: accepted, without the comeback bonus
         val bonus = if (accepted && p.verdict.hrFlat) 0 else Progress.comebackBonus(Store.state.value, xp)
-        val (kcal, kcalSource) = Burn.estimate(all, Store.state.value.profile, seconds, p.hr?.first)
+        val (kcal, kcalSource) = Burn.estimate(all, Store.state.value.profile, seconds, p.avg)
         Store.update { s ->
             // Sesi mini keeps the streak and the pet, but one set per move says nothing about strength
             val c = if (mini) Progress.Climb(s.ladders, s.boosts, s.loads)
@@ -219,9 +222,9 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 xp = s.xp + xp + bonus,
                 peakXp = maxOf(s.peakXp, s.xp + xp + bonus),
                 logs = s.logs + WorkoutLog(
-                    LocalDate.now().toEpochDay(), title, minutes, all, xp + bonus, p.quit, p.hr?.first, p.hr?.second, bonus,
+                    LocalDate.now().toEpochDay(), title, minutes, all, xp + bonus, p.quit, p.avg, p.hr.maxOfOrNull { it.bpm }, bonus,
                     seconds = seconds, kcal = kcal, kcalSource = kcalSource, startMs = startedAt, endMs = end, doubtful = accepted, mini = mini,
-                ),
+                ).let { if (p.hr.size >= HrAnalysis.MIN_POINTS) HrAnalysis.withHr(it, p.hr, "Broadcast", restingHr, s.profile) else it },
                 ladders = c.ladders,
                 boosts = c.boosts,
                 loads = c.loads,
@@ -241,7 +244,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
         val timedTarget = { id: String -> everyMove().firstOrNull { it.id == id }?.takeIf { Catalog.get(id).timed }?.target }
         val all = Integrity.flag(raw, timedTarget)
         val hr = HeartRate.stopRecording()
-        val p = Pending(quit, all, hr, Integrity.verdict(all, hr?.first, restingHr))
+        val p = Pending(quit, all, hr, Integrity.verdict(all, hr.takeIf { it.isNotEmpty() }?.map { it.bpm }?.average()?.toInt(), restingHr))
         // too quick to be real: ask kindly before saving anything
         if (p.verdict.doubtful && Progress.sessionXp(everyMove(), all) > 0) pending = p else save(p, accepted = false)
     }
@@ -254,7 +257,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
 
     fun logSet(done: Int, failed: Boolean) {
         val now = activeNow()
-        sets += SetLog(done, kg = kg.takeIf { move.weighted }, failed = failed, secs = ((now - setStart) / 1000).toInt(), at = (now / 1000).toInt())
+        sets += SetLog(done, kg = kg.takeIf { move.weighted }, failed = failed, secs = ((now - setStart) / 1000).toInt(), at = (now / 1000).toInt(), endMs = System.currentTimeMillis())
         reps = 0
         toast = null
         if (failed) {
@@ -678,12 +681,14 @@ fun DoneScreen(onHome: () -> Unit) {
     val fresh = remember { my.sado.app.data.Achievements.fresh(s) }
     // Health Connect has the real burn for this window when a watch synced it: prefer that and say so
     val context = LocalContext.current
+    // the watch's readings arrive once it syncs: look again every 30 s while this screen is open
     LaunchedEffect(log.startMs) {
-        val start = log.startMs ?: return@LaunchedEffect
-        val end = log.endMs ?: return@LaunchedEffect
-        if (!s.settings.healthConnect || log.kcalSource == "Health Connect") return@LaunchedEffect
-        val hc = withContext(Dispatchers.IO) { Health.activeKcal(context, start, end) } ?: return@LaunchedEffect
-        Store.update { st -> st.copy(logs = st.logs.map { if (it.startMs == start) it.copy(kcal = hc, kcalSource = "Health Connect") else it }) }
+        if (!s.settings.healthConnect || log.startMs == null) return@LaunchedEffect
+        repeat(20) {
+            if (Store.state.value.logs.lastOrNull()?.hr?.isNotEmpty() == true) return@LaunchedEffect
+            runCatching { HrAnalysis.backfill(context) }
+            kotlinx.coroutines.delay(30_000)
+        }
     }
 
     LaunchedEffect(Unit) { if (fresh.isNotEmpty()) Store.update { it.copy(seenAchievements = it.seenAchievements + fresh.map { a -> a.id }) } }
@@ -721,11 +726,8 @@ fun DoneScreen(onHome: () -> Unit) {
                     color = SadoColors.TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
                 )
             }
-            if (log.avgHr != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Stat("${log.avgHr}", "HR purata")
-                Stat("${log.maxHr}", "Max HR", SadoColors.Danger)
-            }
         }
+        HrReportCard(log, waiting = s.settings.healthConnect)
         NewAchievements(fresh)
         PrimaryButton("BALIK KE HOME", onClick = onHome)
     }

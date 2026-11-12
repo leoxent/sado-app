@@ -63,7 +63,7 @@ object HeartRate {
     private var gatt: BluetoothGatt? = null
     private var scanCallback: ScanCallback? = null
     private val main = Handler(Looper.getMainLooper())
-    private val samples = mutableListOf<Int>()
+    private val samples = mutableListOf<my.sado.app.data.HrPoint>()
     private var recording = false
 
     // the watch the user wants: a drop while it is wanted is retried; Lupakan or a disconnect is not
@@ -232,11 +232,10 @@ object HeartRate {
     fun pause() { recording = false }
     fun resume() { recording = true }
 
-    // average and peak over the session; null when no watch was streaming
-    fun stopRecording(): Pair<Int, Int>? {
+    // the session's readings, one every 5 seconds at most; empty when no watch was streaming
+    fun stopRecording(): List<my.sado.app.data.HrPoint> {
         recording = false
-        if (samples.isEmpty()) return null
-        return samples.average().toInt() to samples.max()
+        return samples.toList()
     }
 
     private fun onValue(v: ByteArray) {
@@ -245,7 +244,8 @@ object HeartRate {
         val bpm = if (sixteenBit && v.size >= 3) (v[1].toInt() and 0xff) or ((v[2].toInt() and 0xff) shl 8) else v[1].toInt() and 0xff
         if (bpm <= 0) return
         _bpm.value = bpm
-        if (recording) samples += bpm
+        val now = System.currentTimeMillis()
+        if (recording && (samples.isEmpty() || now - samples.last().t >= 5_000)) samples += my.sado.app.data.HrPoint(now, bpm)
     }
 
     private val callback = object : BluetoothGattCallback() {
