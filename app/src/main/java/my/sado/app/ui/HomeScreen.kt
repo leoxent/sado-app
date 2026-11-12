@@ -130,6 +130,7 @@ fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Uni
             ) { Icon(Icons.Filled.Settings, contentDescription = "Setting", tint = SadoColors.TextMuted) }
         }
 
+        HrBar(onClick = onHealth, modifier = Modifier.appear(n++))
         if (check != null) WeeklyCheckCard(check, Modifier.appear(n++)) { checkOpen = true }
         if (my.sado.app.data.Care.ramadanOffer(s)) RamadanOfferCard(Modifier.appear(n++))
         if (resting != null) Callout(

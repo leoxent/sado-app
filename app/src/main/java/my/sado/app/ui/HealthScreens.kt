@@ -123,6 +123,40 @@ fun HealthStrip(onClick: () -> Unit) {
     }
 }
 
+/** Home's heart line: the watch's newest reading from Health Connect and what it means right now. */
+@Composable
+fun HrBar(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val s = Store.state.collectAsState().value
+    if (!s.settings.healthConnect) return
+    val resumes = rememberResumes()
+    var loaded by remember { mutableStateOf(false) }
+    val live by produceState<Pair<HrPoint?, Int?>>(null to null, resumes) {
+        value = runCatching { Health.latestHr(context) to Health.restingEstimate(context) }.getOrDefault(null to null)
+        loaded = true
+    }
+    // recent sessions pick up their heart rate whenever Home comes back
+    LaunchedEffect(resumes) { runCatching { HrAnalysis.backfill(context) } }
+    if (!loaded) return
+    val (pt, resting) = live
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface).clickable { onClick() }.padding(vertical = 12.dp, horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("\u2764\ufe0f " + (pt?.let { "${it.bpm} bpm" } ?: "–"), color = SadoColors.Text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+        val ago = pt?.let { System.currentTimeMillis() - it.t }
+        when {
+            pt == null -> Text("Tiada bacaan HR · buka Garmin Connect untuk sync", color = SadoColors.TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            ago!! > HrAnalysis.STALE_MS -> Text("data lama (${agoText(ago)}) · buka Garmin Connect", color = SadoColors.TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            else -> {
+                val st = HrAnalysis.state(pt.bpm, resting, s.profile?.age ?: 25)
+                Text(st.label, color = stateColor(st), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                Text(agoText(ago) + (resting?.let { " · rehat $it" } ?: ""), color = SadoColors.TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+            }
+        }
+    }
+}
+
 private fun stateColor(st: HrAnalysis.State) = when (st) {
     HrAnalysis.State.Rest -> SadoColors.Sky
     HrAnalysis.State.Active -> SadoColors.Accent
