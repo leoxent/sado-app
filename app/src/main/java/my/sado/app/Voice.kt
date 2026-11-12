@@ -223,7 +223,7 @@ object Lines {
 // ElevenLabs text-to-speech, cached as mp3 per (voice, line) in private storage. The API key
 // stays in the Keystore-encrypted secret file and only goes to api.elevenlabs.io.
 object VoiceClips {
-    const val MODEL = "eleven_v3" // reads [audio tags] as expression instead of saying them
+    const val MODEL = "eleven_v4" // reads [audio tags] as expression instead of saying them
     private const val API = "https://api.elevenlabs.io/v1"
     private var player: MediaPlayer? = null
     private val io = Executors.newSingleThreadExecutor()
@@ -418,7 +418,7 @@ object VoiceClips {
 
     /** One text-to-speech call; writes the mp3 on 200 and returns the status with any error body. */
     private fun request(key: String, voiceId: String, text: String, out: File, pinLanguage: Boolean, steady: Boolean = false): Pair<Int, String?> {
-        val conn = URL("$API/text-to-speech/$voiceId?output_format=mp3_44100_64").openConnection() as HttpURLConnection
+        val conn = URL("$API/text-to-speech/$voiceId?output_format=mp3_22050_32").openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
             conn.connectTimeout = 15000; conn.readTimeout = 30000
@@ -471,7 +471,7 @@ object VoiceClips {
     }
 
     private fun takeOnce(key: String, voiceId: String, text: String, pinLanguage: Boolean): Pair<Pair<ByteArray, List<Triple<Char, Double, Double>>>?, String?> {
-        val conn = URL("$API/text-to-speech/$voiceId/with-timestamps?output_format=mp3_44100_64").openConnection() as HttpURLConnection
+        val conn = URL("$API/text-to-speech/$voiceId/with-timestamps?output_format=mp3_22050_32").openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
             conn.connectTimeout = 15000; conn.readTimeout = 60000

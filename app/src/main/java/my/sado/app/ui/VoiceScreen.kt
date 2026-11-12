@@ -104,7 +104,8 @@ fun VoiceScreen(onBack: () -> Unit, onLibrary: () -> Unit = {}) {
                     if (job.size > 1) VoiceClips.generateBatch(context, key, voice.voiceId, job)
                     else VoiceClips.generate(context, key, voice.voiceId, job.first(), steady = job.first() in parts)
                 }
-                done += job.size
+                // a batch of ten lands at once; count it up one clip at a time anyway
+                if (job.size == 1) done++ else repeat(job.size) { done++; progress = done to phrases.size; kotlinx.coroutines.delay(90) }
             }
             progress = null
             refresh++
