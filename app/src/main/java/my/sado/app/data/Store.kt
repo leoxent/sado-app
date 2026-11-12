@@ -37,6 +37,9 @@ object Store {
         // 5 → 15 levels: old Kurus/Berisi/Fit/Sado/Beast map to tier I of the same body
         val s0 = if (state.levelFloor >= 0) state else state.copy(levelFloor = Progress.oldLevel(state) * 3)
         val s = Pets.migrate(s0.copy(peakXp = maxOf(s0.peakXp, s0.xp), answers = s0.answers?.let(::splitDelts)))
+        // a plan from an older builder is rebuilt once from the saved answers; ladders and progress stay
+        if (s.plan != null && s.answers != null && s.planBuilt < PlanBuilder.VERSION)
+            return s.copy(plan = PlanBuilder.build(s.answers, s.ladders), planBuilt = PlanBuilder.VERSION)
         val p = s.plan ?: return s
         val reps = mapOf("maks rep" to "maximum rep", "max rep" to "maximum rep", "5 turun perlahan" to "5 rep turun slow", "40s kerja, 20s rehat" to "40s work, 20s rest")
         return s.copy(plan = p.copy(

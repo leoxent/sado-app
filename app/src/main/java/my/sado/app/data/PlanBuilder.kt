@@ -123,6 +123,13 @@ object PlanBuilder {
         "Lower" to listOf("legs", "glutes", "abs", "lower_back", "cardio"),
         "Power" to listOf("legs", "glutes", "chest", "lats", "abs"),
     )
+    // the group a day is named after: its first move, so a Legs + Push day really has legs in it
+    private val anchors = mapOf("Legs+Push" to "legs", "Legs+Core" to "legs", "Lower" to "legs", "Push" to "chest", "Pull" to "lats")
+    // at most this many moves of one group in a day (focus groups excepted), so a day isn't four push-up variants
+    private const val PER_DAY = 2
+    // bump when the builder changes how it fills a week: saved plans are rebuilt once from the saved answers
+    const val VERSION = 2
+
     val tagLabels = mapOf(
         "Pull" to "Pull day", "Push" to "Push day",
         "Legs+Push" to "Legs + Push", "Legs+Core" to "Legs + Core",
@@ -188,17 +195,19 @@ object PlanBuilder {
         val picked = order.associateWith { mutableListOf<Move>() }
         val got = mutableMapOf<String, Int>()
         val used = mutableSetOf<String>()
-        repeat(n) {
+        repeat(n) { round ->
             order.forEach { tag ->
                 val mine = picked.getValue(tag)
                 val taken = { m: Move -> mine.any { idOf(it) == idOf(m) } }
+                val full = { g: String -> g !in focus && mine.count { it.group == g } >= PER_DAY }
                 // focus groups still under their floor come first, then whoever is furthest below target
                 val groups = (tagGroups[tag] ?: targets.keys.toList()).sortedByDescending { g ->
                     val gap = (targets[g] ?: 0.0) - (got[g] ?: 0)
                     if (g in focus && (got[g] ?: 0) < FOCUS_SETS) 1000.0 + (FOCUS_SETS - (got[g] ?: 0)) + gap / 1000 else gap
                 }
                 var ex: Move? = null
-                for (g in groups) {
+                val anchor = anchors[tag]?.takeIf { round == 0 && rating(a, it) > 1 }
+                for (g in listOfNotNull(anchor) + groups.filterNot { full(it) }) {
                     ex = pool.firstOrNull { it.group == g && !taken(it) && idOf(it) !in used } ?: pool.firstOrNull { it.group == g && !taken(it) }
                     if (ex != null) break
                 }

@@ -198,7 +198,7 @@ fun PlannerScreen(onBack: () -> Unit, onDone: () -> Unit) {
         FocusStep(a, ladders, step = questions.size, total = total, onBack = { review = null }) { final ->
             Store.update { s ->
                 val l = PlanBuilder.startingLadders(final) + s.ladders
-                s.copy(answers = final, ladders = l, plan = PlanBuilder.build(final, l), planStart = java.time.LocalDate.now().toEpochDay())
+                s.copy(answers = final, ladders = l, plan = PlanBuilder.build(final, l), planBuilt = PlanBuilder.VERSION, planStart = java.time.LocalDate.now().toEpochDay())
             }
             onDone()
         }

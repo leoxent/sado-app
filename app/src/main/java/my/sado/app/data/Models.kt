@@ -224,6 +224,7 @@ data class AppState(
     val answers: PlannerAnswers? = null,
     val plan: Plan? = null,
     val planStart: Long? = null,
+    val planBuilt: Int = 0, // PlanBuilder.VERSION the saved plan was made with
     val xp: Int = 0,
     val logs: List<WorkoutLog> = emptyList(),
     val sports: List<SportLog> = emptyList(),
