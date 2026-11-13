@@ -51,9 +51,9 @@ object Nutrition {
             noCut && (fatHigh || (wantsLean && fatSome)) -> "Kekal" to 1.0f
             fatHigh -> "Cut" to 0.80f
             wantsLean && fatSome -> "Cut" to 0.85f
-            bmi < 20.5f && (wantsSize || wantsLean || body == "skinny") -> "Lean bulk" to 1.08f
+            bmi < 20.5f && (wantsSize || wantsLean || body == "skinny") -> "Lean bulk" to 1.05f
             wantsLean -> "Recomp" to 1.0f
-            wantsSize || body == "skinny" -> "Lean bulk" to 1.10f
+            wantsSize || body == "skinny" -> "Lean bulk" to 1.05f
             else -> "Kekal" to 1.0f
         }
         why += when (mode) {
@@ -84,7 +84,7 @@ object Nutrition {
         why += "Lemak ${fat}g untuk hormon, karbo ${carbs}g untuk tenaga workout."
         val weekly = when (mode) {
             "Cut" -> "−${"%.1f".format(p.weightKg * 0.005f)} kg seminggu"
-            "Lean bulk" -> "+0.25 kg seminggu"
+            "Lean bulk" -> "+0.1–0.25 kg seminggu"
             "Recomp" -> "berat lebih kurang sama, cermin yang berubah"
             else -> "berat kekal"
         }

@@ -13,8 +13,8 @@ android {
         applicationId = "my.sado.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 85
-        versionName = "0.44.0"
+        versionCode = 86
+        versionName = "0.45.0"
         // ML Kit ships native libs per CPU; arm64 covers modern phones and keeps the APK sideload-friendly
         ndk { abiFilters += listOf("arm64-v8a") }
     }

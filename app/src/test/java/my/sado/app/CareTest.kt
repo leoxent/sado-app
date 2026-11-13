@@ -134,7 +134,7 @@ class CareTest {
     }
 
     // ── rest mode ──
-    private fun trained(idle: Int, xp: Int = 2400): AppState {
+    private fun trained(idle: Int, xp: Int = 1600): AppState {
         val last = day - idle
         return AppState(xp = xp, levelFloor = 0, peakXp = xp, logs = (0 until 27).map { i -> WorkoutLog(last - i * 7L / 3, "w", 30, emptyList(), 100, false) }.reversed())
     }

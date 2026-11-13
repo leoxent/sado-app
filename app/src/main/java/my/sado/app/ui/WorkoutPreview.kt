@@ -102,7 +102,7 @@ fun WorkoutPreviewScreen(source: String, onBack: () -> Unit, onExercise: (String
     }
     var editing by remember { mutableStateOf<String?>(null) }
     val sets = plan.sumOf { it.sets }
-    val minutes = (sets * (1 + st.restSeconds / 60.0)).toInt() + if (st.warmup) 1 else 0
+    val minutes = (my.sado.app.data.PlanBuilder.realSeconds(plan, st.restSeconds) + 59) / 60 + if (st.warmup) 1 else 0
     val moves = plan.map { it to Catalog.get(it.id) }
     // hard sets per muscle: the moves that train it as a main mover
     val worked = moves.flatMap { (e, m) -> m.muscles.map { it to e.sets } }

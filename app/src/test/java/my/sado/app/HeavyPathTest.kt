@@ -42,10 +42,10 @@ class HeavyPathTest {
         // week 4 with the XP for it: Berisi I on the slim path, still Gempal III on the big one
         assertEquals("Berisi I", Progress.stageFor(state(4, 1200, "kurus")).name)
         assertEquals("Gempal III", Progress.stageFor(state(4, 1200)).name)
-        assertEquals("Bangkit I", Progress.stageFor(state(6, 1800)).name)
+        assertEquals("Bangkit I", Progress.stageFor(state(6, 1200)).name)
         assertEquals("Bangkit III", Progress.stageFor(state(8, 2400)).name)
-        assertEquals("Fit I", Progress.stageFor(state(10, 3000)).name)
-        assertEquals("Fit I", Progress.stageFor(state(10, 3000, "kurus")).name)
+        assertEquals("Fit I", Progress.stageFor(state(10, 2000)).name)
+        assertEquals("Fit I", Progress.stageFor(state(10, 2000, "kurus")).name)
         assertEquals(my.sado.app.R.drawable.gempal3, Progress.stageFor(state(4, 1200)).image)
     }
 
@@ -76,11 +76,11 @@ class HeavyPathTest {
         val placed = Progress.place(AppState(profile = man))
         assertEquals("Berisi I", Progress.stageFor(placed).name)
         assertEquals(4, Progress.weeksActive(placed))
-        assertEquals("Berisi I", Progress.stageFor(placed.copy(xp = 1800)).name)
+        assertEquals("Berisi I", Progress.stageFor(placed.copy(xp = 1200)).name)
         // heavy path lands on Bangkit I with its own XP and weeks
         val big = Progress.place(AppState(profile = Profile(heightCm = 170f, weightKg = 85f)))
         assertEquals("Bangkit I", Progress.stageFor(big).name)
-        assertEquals(1800, big.xp)
+        assertEquals(1200, big.xp)
         // switching path later never drops below level 4
         assertEquals("Bangkit I", Progress.stageFor(placed.copy(settings = Settings(bodyPath = "gempal"))).name)
         assertFalse(Progress.proveOffered(AppState(profile = Profile(heightCm = 165f, weightKg = 95f))))

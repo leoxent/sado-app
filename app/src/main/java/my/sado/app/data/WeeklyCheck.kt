@@ -51,7 +51,7 @@ object WeeklyCheck {
     /** The expected weekly change in kg for a mode, as a range. */
     fun range(mode: String, kg: Float): Pair<Float, Float> = when (mode) {
         "Cut" -> -0.01f * kg to -0.0025f * kg
-        "Lean bulk" -> 0.1f to 0.5f
+        "Lean bulk" -> 0.05f to 0.3f
         else -> -0.3f to 0.3f
     }
 

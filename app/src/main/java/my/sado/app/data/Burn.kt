@@ -26,10 +26,17 @@ object Burn {
         return (perMin * seconds / 60.0).toInt().coerceAtLeast(0)
     }
 
+    /**
+     * Keytel was built on steady aerobic work and reads strength sessions high (a median 1.57× the MET figure in
+     * the research run), so a heart-rate estimate is averaged with the MET one.
+     */
+    fun blend(hr: Int, met: Int) = if (met <= 0) hr else (hr + met) / 2
+
     /** The best estimate on hand and where it came from; Health Connect can replace it later on the Done screen. */
     fun estimate(logs: List<ExerciseLog>, p: Profile?, seconds: Int, avgHr: Int?): Pair<Int, String> {
         val kg = p?.weightKg ?: 65f
-        if (avgHr != null && p != null && avgHr > 60) hrKcal(avgHr, p, seconds).takeIf { it > 0 }?.let { return it to "HR jam" }
-        return metKcal(met(logs), kg, seconds) to "MET"
+        val metK = metKcal(met(logs), kg, seconds)
+        if (avgHr != null && p != null && avgHr > 60) hrKcal(avgHr, p, seconds).takeIf { it > 0 }?.let { return blend(it, metK) to "HR jam" }
+        return metK to "MET"
     }
 }

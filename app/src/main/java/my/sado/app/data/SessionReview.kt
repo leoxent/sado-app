@@ -95,6 +95,8 @@ object SessionReview {
             val work = (hr.zones[HrAnalysis.State.Workout] ?: 0) * 100 / total
             out += "Purata HR ${hr.avg}, paling tinggi ${hr.max}" +
                 (if (work >= 50) ", kebanyakan masa dalam zon senaman." else if (hr.rose == false) ", hampir tak naik dari rehat." else ".")
+            // all-day readings (a minute or two apart) can't show sets or back the honesty check
+            if (!hr.dense) out += "Bacaan HR jarang (jam rekod lebih kurang setiap minit), jadi analisis setiap set tak dapat dibuat. Mula aktiviti Strength kat jam, atau guna Broadcast, untuk bacaan yang rapat."
             val drops = hr.sets.mapNotNull { it.drop }
             if (drops.size >= 2) {
                 val avg = drops.average().toInt()

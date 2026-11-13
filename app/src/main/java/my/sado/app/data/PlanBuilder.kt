@@ -95,8 +95,52 @@ object PlanBuilder {
         "pull" to LadderProgress(rung = when { a.pull >= 1 -> 2; a.pull == 0 -> 1; else -> 0 }),
     )
 
+    /** Sets per move: from the intensity answer; a 10-minute session keeps to 2 so it really fits in 10 minutes. */
+    fun setsPer(a: PlannerAnswers) = listOf(2, 3, 4)[a.intensity].let { if (a.time <= 10) minOf(it, 2) else it }
+
+    // a set takes about 36 s of work (12 reps × 3 s), the app's default 90 s rest sits between sets, 20 s to get set
+    // up per move and a minute to change moves
+    const val WORK_SECONDS = 36
+    const val REST_SECONDS = 90
+    const val MOVE_SECONDS = 60
+
+    /**
+     * Rest between two sets of the same move. A small one-muscle move recovers faster, so it gets two thirds of the
+     * setting (60 s on the default 90); intervals keep the 20 s their dose says. Changing moves always gets the full rest.
+     */
+    fun restBetween(m: Move, setting: Int) = when {
+        m.group == "cardio" -> 20
+        shortRest(m) -> (setting * 2 / 3 / 5 * 5).coerceAtLeast(45)
+        else -> setting
+    }
+
+    fun shortRest(m: Move) = m.muscles.size == 1 && !m.timed && m.id != "nordic"
+
+    /** Seconds a session really takes: each set's work, the rest between sets, 20 s to set up a move, a minute to change. */
+    fun realSeconds(ex: List<PlannedExercise>, rest: Int = REST_SECONDS): Int = ex.sumOf { e ->
+        val m = Catalog.get(e.id)
+        val d = Progress.dose(e.reps)
+        val work = if (m.timed || d?.timed == true || m.group == "cardio") e.target else (d?.hi ?: e.target) * 3
+        e.sets * work + (e.sets - 1) * restBetween(m, rest) + 20
+    } + (ex.size - 1).coerceAtLeast(0) * MOVE_SECONDS
+
+    /** Seconds a session of [n] moves takes, before the moves are known (every move at the full rest). */
+    fun sessionSeconds(a: PlannerAnswers, n: Int) = n * (setsPer(a) * WORK_SECONDS + (setsPer(a) - 1) * REST_SECONDS + 20) + (n - 1) * MOVE_SECONDS
+
+    /**
+     * Moves a session holds within its minutes (15% leeway). The research run found the old fixed counts (3/4/5/6) put
+     * a "10 minute" session at a median 16.5 minutes.
+     */
+    fun movesPer(a: PlannerAnswers) = (2..6).lastOrNull { sessionSeconds(a, it) <= a.time * 60 * 1.15 } ?: 2
+
+    // the groups each body shape is really about: they fill before the rest, up to FOCUS_SETS, unless rated low
+    val shapeCore = mapOf(
+        "vshape" to listOf("lats", "side_delts"), "aesthetic" to listOf("chest", "side_delts", "abs"), "bulk" to listOf("chest", "lats", "legs"),
+        "athletic" to listOf("legs", "glutes"), "lean" to listOf("legs", "chest"), "shredded" to listOf("chest", "side_delts", "abs"),
+    )
+
     fun dose(m: Move, a: PlannerAnswers): Triple<Int, String, Int> {
-        val sets = listOf(2, 3, 4)[a.intensity]
+        val sets = setsPer(a)
         val hyper = a.shape.any { it in hyperShapes }
         // intervals are for cardio only; on Kurus & tone the strength moves stay rep-based (12–15) so they keep the muscle
         return when {
@@ -128,7 +172,7 @@ object PlanBuilder {
     // at most this many moves of one group in a day (focus groups excepted), so a day isn't four push-up variants
     private const val PER_DAY = 2
     // bump when the builder changes how it fills a week: saved plans are rebuilt once from the saved answers
-    const val VERSION = 2
+    const val VERSION = 3
 
     val tagLabels = mapOf(
         "Pull" to "Pull day", "Push" to "Push day",
@@ -187,7 +231,7 @@ object PlanBuilder {
     // Moves are compared by the ladder rung they become, and moves another session already has go last.
     private fun assemble(
         tags: List<String>, a: PlannerAnswers, n: Int, targets: Map<String, Double>, focus: Set<String>,
-        pool: List<Move>, idOf: (Move) -> String,
+        pool: List<Move>, idOf: (Move) -> String, core: Set<String> = emptySet(),
     ): Week {
         val week = patterns.getValue(a.days).let { p -> var k = 0; p.map { if (it == 1) tags[k++ % tags.size] else "Rest" } }
         val order = week.filter { it != "Rest" }.distinct()
@@ -203,12 +247,23 @@ object PlanBuilder {
                 // focus groups still under their floor come first, then whoever is furthest below target
                 val groups = (tagGroups[tag] ?: targets.keys.toList()).sortedByDescending { g ->
                     val gap = (targets[g] ?: 0.0) - (got[g] ?: 0)
-                    if (g in focus && (got[g] ?: 0) < FOCUS_SETS) 1000.0 + (FOCUS_SETS - (got[g] ?: 0)) + gap / 1000 else gap
+                    when {
+                        g in focus && (got[g] ?: 0) < FOCUS_SETS -> 1000.0 + (FOCUS_SETS - (got[g] ?: 0)) + gap / 1000
+                        g in core && (got[g] ?: 0) < FOCUS_SETS -> 500.0 + (FOCUS_SETS - (got[g] ?: 0)) + gap / 1000
+                        else -> gap
+                    }
                 }
+                // a second move of a group on the same day should work something the first didn't (a calf raise
+                // after a squat, a hamstring curl after a bridge), so small muscles get trained too; a focus or
+                // shape group keeps its big compound moves instead
+                val dayMuscles = mine.flatMap { Catalog.get(idOf(it)).muscles }.toSet()
+                val fresh = { m: Move -> m.group in focus || m.group in core || mine.none { it.group == m.group } || Catalog.get(idOf(m)).muscles.any { it !in dayMuscles } }
                 var ex: Move? = null
                 val anchor = anchors[tag]?.takeIf { round == 0 && rating(a, it) > 1 }
                 for (g in listOfNotNull(anchor) + groups.filterNot { full(it) }) {
-                    ex = pool.firstOrNull { it.group == g && !taken(it) && idOf(it) !in used } ?: pool.firstOrNull { it.group == g && !taken(it) }
+                    ex = pool.firstOrNull { it.group == g && !taken(it) && idOf(it) !in used && fresh(it) }
+                        ?: pool.firstOrNull { it.group == g && !taken(it) && fresh(it) }
+                        ?: pool.firstOrNull { it.group == g && !taken(it) && idOf(it) !in used } ?: pool.firstOrNull { it.group == g && !taken(it) }
                     if (ex != null) break
                 }
                 if (ex == null) ex = pool.firstOrNull { !taken(it) && idOf(it) !in used } ?: pool.firstOrNull { !taken(it) }
@@ -224,7 +279,8 @@ object PlanBuilder {
         // distance from the targets, with a heavy cost for a focus group under its floor or trained only once a week
         val score = targets.entries.sumOf { (g, t) -> kotlin.math.abs(t - (got[g] ?: 0)) } +
             focus.sumOf { g -> 25.0 * maxOf(0, FOCUS_SETS - (got[g] ?: 0)) } +
-            focus.count { g -> a.days >= 2 && (days[g] ?: 0) < 2 } * 15.0
+            focus.count { g -> a.days >= 2 && (days[g] ?: 0) < 2 } * 15.0 +
+            core.sumOf { g -> 8.0 * maxOf(0, FOCUS_SETS - (got[g] ?: 0)) }
         val sessions = order.map { tag ->
             // the day's own groups in order, so a Push day opens with chest
             val rank = tagGroups[tag] ?: targets.keys.toList()
@@ -246,15 +302,16 @@ object PlanBuilder {
         groupNames.keys.filter { it != "cardio" }.forEach { g -> w[g] = ((w[g] ?: 0.0) + (baseWeight[g] ?: 5.0)) * ratingScale[rating(a, g) - 1] }
 
         // weekly set targets: the week's sets shared by weight, every focus group lifted to its floor first
-        val n = mapOf(10 to 3, 20 to 4, 30 to 5, 45 to 6).getValue(a.time)
-        val total = (a.days * n * listOf(2, 3, 4)[a.intensity]).toDouble()
-        val sumW = w.values.sum().takeIf { it > 0 } ?: 1.0
-        val raw = w.filter { it.value > 0 }.mapValues { total * it.value / sumW }
         val focus = groupNames.keys.filter { it != "cardio" && rating(a, it) == 5 }.toSet()
-        val fixed = focus.associateWith { maxOf(raw[it] ?: 0.0, FOCUS_SETS.toDouble()) }
-        val rest = raw.filterKeys { it !in focus }
-        val scale = if (rest.values.sum() > 0) maxOf(0.0, total - fixed.values.sum()) / rest.values.sum() else 0.0
-        val targets = (fixed + rest.mapValues { it.value * scale }).entries.sortedByDescending { it.value }.associate { it.key to it.value }
+        fun targetsFor(n: Int): Map<String, Double> {
+            val total = (a.days * n * setsPer(a)).toDouble()
+            val sumW = w.values.sum().takeIf { it > 0 } ?: 1.0
+            val raw = w.filter { it.value > 0 }.mapValues { total * it.value / sumW }
+            val fixed = focus.associateWith { maxOf(raw[it] ?: 0.0, FOCUS_SETS.toDouble()) }
+            val rest = raw.filterKeys { it !in focus }
+            val scale = if (rest.values.sum() > 0) maxOf(0.0, total - fixed.values.sum()) / rest.values.sum() else 0.0
+            return (fixed + rest.mapValues { it.value * scale }).entries.sortedByDescending { it.value }.associate { it.key to it.value }
+        }
 
         val has = { s: String -> s in a.shape }
         val hyper = a.shape.any { it in hyperShapes }
@@ -274,9 +331,21 @@ object PlanBuilder {
             (0 until maxOf(db.size, bw.size)).flatMap { i -> listOfNotNull(db.getOrNull(i), bw.getOrNull(i)) }
         }
         val idOf = { m: Move -> progressed(m.id, a, ladders) }
-        val built = options.map { assemble(it, a, n, targets, focus, pool, idOf) }
-        val best = built.reduce { b, c -> if (c.score < b.score - 0.01) c else b }
-        val switched = best !== built.first()
+        val core = a.shape.flatMap { shapeCore.getValue(it) }.filter { rating(a, it) >= 3 && it !in focus }.toSet()
+        // the move count from the full rest, then one more when the real moves (short rests on small ones) still fit
+        val budget = a.time * 60 * 1.15
+        fun weekOf(n: Int): Pair<Week, Boolean> {
+            val built = options.map { assemble(it, a, n, targetsFor(n), focus, pool, idOf, core) }
+            val best = built.reduce { b, c -> if (c.score < b.score - 0.01) c else b }
+            return best to (best !== built.first())
+        }
+        var n = movesPer(a)
+        var (best, switched) = weekOf(n)
+        while (n < 6) {
+            val (more, sw) = weekOf(n + 1)
+            if (more.sessions.any { realSeconds(it.exercises) > budget }) break
+            n++; best = more; switched = sw
+        }
         val tagsUsed = best.week.filter { it != "Rest" }.toSet()
 
         val why = mutableListOf<String>()
@@ -314,6 +383,9 @@ object PlanBuilder {
         if ("dumbbell" in a.equip) why += "Ada dumbbell: move dumbbell dimasukkan. Bila rep atas dah senang, naikkan berat."
         if ("Legs+Push" in tagsUsed && "Legs+Core" in tagsUsed) why += "Legs+Push dan Legs+Core, jadi kaki pun kena 2× seminggu."
         if (hyper) why += "Rest 90s antara set, stop bila tinggal 1–2 rep."
+        val coreMet = core.filter { (best.got[it] ?: 0) >= FOCUS_SETS }
+        if (coreMet.isNotEmpty()) why += "Otot utama bentuk ni diberi dulu: " + coreMet.joinToString(", ") { "${groupNames.getValue(it)} ${best.got[it]} set" } + " seminggu."
+        why += "Anggaran sesi: $n move × ${setsPer(a)} set, lebih kurang ${(best.sessions.maxOf { realSeconds(it.exercises) } + 59) / 60} minit (rehat 90s, 60s untuk move kecil)."
         if (a.time == 10 || (a.intensity == 0 && a.days <= 2)) why += "Jujur: sesi ni cukup untuk kekalkan otot. Untuk naik, sasarkan 10+ set seminggu setiap otot."
         if ("impact" in a.injury) why += "Mod low-impact: takde lompat, sendi lutut dan buku lali lebih selamat. Bila berat turun, buat semula plan untuk buka balik."
         if (a.injury.any { it != "impact" }) why += "Move yang risky untuk " + a.injury.filter { it != "impact" }.joinToString(" & ") {

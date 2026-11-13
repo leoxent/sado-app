@@ -58,7 +58,10 @@ object Integrity {
     const val REST_SKIP_RUN = 3
     const val BURST_SETS = 5
     const val BURST_SECS = 60
-    const val HR_OVER_REST = 15
+    const val HR_OVER_REST = 15 // a reading this far above resting counts as working
+    // the whole session's average under resting + this means the body never worked; +20 caught 75% of faked
+    // sessions with no honest one flagged in the research run (+15 caught 64%)
+    const val HR_FLAT = 20
 
     /** A rest counts as skipped when it ends with more than a third and more than 15 s still on the clock. */
     fun restSkipped(planned: Int, left: Int) = left > 15 && left * 3 > planned
@@ -97,7 +100,7 @@ object Integrity {
     }
 
     /** A watch that barely moved above resting is the strongest sign; null when either number is missing. */
-    fun hrFlat(avgHr: Int?, restingHr: Int?) = avgHr != null && restingHr != null && avgHr < restingHr + HR_OVER_REST
+    fun hrFlat(avgHr: Int?, restingHr: Int?) = avgHr != null && restingHr != null && avgHr < restingHr + HR_FLAT
 
     fun verdict(flagged: List<ExerciseLog>, avgHr: Int?, restingHr: Int?): Verdict {
         val all = flagged.flatMap { it.sets }

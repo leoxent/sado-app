@@ -201,7 +201,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
             Phase.Warmup -> Coach.say(if (my.sado.app.data.Progress.lowImpact(my.sado.app.data.Store.state.value)) Lines.warmupLow else Lines.warmup)
             Phase.Work -> if (sets.isEmpty()) Coach.sayParts(Coach.intro(move.name, cur.sets, cur.reps)) else Coach.say(Lines.set(sets.size + 1, last = sets.size + 1 == cur.sets))
             Phase.Effort -> Coach.say(Lines.effort)
-            Phase.Rest -> Coach.say(Lines.rest(settings.restSeconds + extraRest))
+            Phase.Rest -> Coach.say(Lines.rest((if (sets.size >= cur.sets) settings.restSeconds else my.sado.app.data.PlanBuilder.restBetween(move, settings.restSeconds)) + extraRest))
         }
     }
 
@@ -258,6 +258,9 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
         sets.clear(); reps = 0
         if (idx == plan.lastIndex) finish(false) else { idx++; phase = Phase.Work }
     }
+
+    // between sets of a small move (a calf raise, a lateral raise) the rest is shorter; changing moves gets it all
+    fun restNow() = if (sets.size >= cur.sets) settings.restSeconds else my.sado.app.data.PlanBuilder.restBetween(move, settings.restSeconds)
 
     fun logSet(done: Int, failed: Boolean) {
         val now = activeNow()
@@ -337,12 +340,12 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                     move.tips.forEachIndexed { i, t -> Text("${i + 1}. $t", color = SadoColors.TextMuted, fontSize = 13.sp) }
                 }
             }
-            Phase.Effort -> EffortAsk(move.name) { rir ->
+            Phase.Effort -> EffortAsk(move.name, failed = sets.any { it.failed }) { rir ->
                 for (i in sets.indices) sets[i] = sets[i].copy(rir = rir)
                 if (idx == plan.lastIndex) { logs += ExerciseLog(cur.id, sets.toList()); sets.clear(); finish(false) } else phase = Phase.Rest
             }
             Phase.Rest -> {
-                val restFor = settings.restSeconds + extraRest
+                val restFor = restNow() + extraRest
                 Rest(
                     seconds = restFor,
                     nextLabel = if (sets.size >= cur.sets) "Lepas ni · move ${idx + 2} / ${plan.size}" else "Lepas ni · set ${sets.size + 1} / ${cur.sets}",
@@ -521,31 +524,50 @@ private fun TargetCard(target: String, camReps: Int?) {
 
 // asked once per move after its last set; the answer drives the move ladder
 @Composable
-private fun EffortAsk(moveName: String, onAnswer: (Int) -> Unit) {
+private fun EffortAsk(moveName: String, failed: Boolean, onAnswer: (Int) -> Unit) {
+    // pick, then save: the last "Set done" press can't land on an answer, and the button says what the answer does
+    var picked by remember { mutableStateOf<Int?>(null) }
+    val options = listOf(
+        EffortOption("Sangat easy", "Boleh buat 5+ rep lagi", "target +2", 4),
+        EffortOption("Easy", "Boleh buat 3 rep lagi", "target +1", 3),
+        EffortOption("Ngam", "Tinggal 1–2 rep je", "target kekal", 1),
+        EffortOption("Susah", "Tak sampai target", "target −1", 0),
+    )
     Title("Macam mana tadi?", moveName)
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Image(painterResource(R.drawable.face_think), null, Modifier.height(110.dp))
     }
     Text("Jawapan ni tentukan target rep sesi depan.", color = SadoColors.TextMuted, fontSize = 13.sp)
-    listOf(
-        Triple("Sangat easy", "Boleh buat 5+ rep lagi · target +2", 4),
-        Triple("Easy", "Boleh buat 3 rep lagi · target +1", 3),
-        Triple("Ngam", "Tinggal 1–2 rep je · target kekal", 1),
-        Triple("Susah", "Tak sampai target · target −1", 0),
-    ).forEachIndexed { i, (label, sub, rir) ->
+    options.forEachIndexed { i, o ->
         val c = listOf(SadoColors.Accent, SadoColors.Sky, SadoColors.Violet, SadoColors.Streak)[i]
+        val on = picked == i
         Row(
-            Modifier.fillMaxWidth().pressable { Feedback.tap(); onAnswer(rir) }.clip(RoundedCornerShape(20.dp))
-                .background(c.copy(alpha = 0.12f)).border(2.dp, c.copy(alpha = 0.5f), RoundedCornerShape(20.dp)).padding(horizontal = 18.dp, vertical = 14.dp),
+            Modifier.fillMaxWidth().pressable { Feedback.tap(); picked = i }.clip(RoundedCornerShape(20.dp))
+                .background(c.copy(alpha = if (on) 0.28f else 0.10f))
+                .border(if (on) 3.dp else 2.dp, c.copy(alpha = if (on) 1f else 0.4f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(label, color = c, fontSize = 22.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
-                Text(sub, color = SadoColors.TextMuted, fontSize = 13.sp)
+                Text(o.label, color = c, fontSize = 22.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+                Text("${o.sub} · ${o.effect}", color = SadoColors.TextMuted, fontSize = 13.sp)
             }
+            if (on) Text("✓", color = c, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
+    val choice = picked?.let { options[it] }
+    // a set given up on this move and an answer that raises the target don't agree: say so once, still allow it
+    if (choice != null && failed && choice.rir >= 3) Text(
+        "Tadi ada set tak sampai target. Betul ke ${choice.label.lowercase()}? Kalau ya, tekan Simpan.",
+        color = SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+        modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
+    )
+    PrimaryButton(choice?.let { "Simpan · ${it.effect}" } ?: "Pilih satu dulu", Modifier.fillMaxWidth(), enabled = choice != null) {
+        Feedback.success(); choice?.let { onAnswer(it.rir) }
+    }
 }
+
+private data class EffortOption(val label: String, val sub: String, val effect: String, val rir: Int)
 
 @Composable
 private fun TimedSet(target: Int, onSeconds: (Int) -> Unit) {

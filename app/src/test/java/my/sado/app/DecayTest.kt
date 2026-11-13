@@ -26,23 +26,23 @@ class DecayTest {
     }
 
     @Test fun weekOffIsRest() {
-        val s = state(weeks = 9, idle = 7, xp = 2400) // Berisi III
+        val s = state(weeks = 9, idle = 7, xp = 1600) // Berisi III
         assertFalse(Progress.isTired(s, today))
         assertEquals(s, Progress.applyDecay(s, today))
     }
 
     @Test fun tiredButNoDropBeforeDay21() {
-        val s = state(weeks = 9, idle = 20, xp = 2400)
+        val s = state(weeks = 9, idle = 20, xp = 1600)
         assertTrue(Progress.isTired(s, today))
         assertEquals(1, Progress.daysToDrop(s, today))
         assertEquals("Berisi III", Progress.stageFor(Progress.applyDecay(s, today)).name)
     }
 
     @Test fun dropsOneTierAtDay21ThenEvery14() {
-        val s = state(weeks = 9, idle = 21, xp = 2400)
+        val s = state(weeks = 9, idle = 21, xp = 1600)
         val d = Progress.applyDecay(s, today)
         assertEquals("Berisi II", Progress.stageFor(d).name)
-        assertEquals(2400, d.peakXp)
+        assertEquals(1600, d.peakXp)
         assertTrue(Progress.dropped(d))
         // same day again: nothing more
         assertEquals(d, Progress.applyDecay(d, today))
@@ -51,7 +51,7 @@ class DecayTest {
     }
 
     @Test fun neverBelowTierOneOfTheBody() {
-        val s = state(weeks = 9, idle = 200, xp = 2400)
+        val s = state(weeks = 9, idle = 200, xp = 1600)
         val d = Progress.applyDecay(s, today)
         assertEquals("Berisi I", Progress.stageFor(d).name)
         assertEquals(null, Progress.daysToDrop(d, today))
@@ -66,9 +66,9 @@ class DecayTest {
     }
 
     @Test fun comebackDoublesUpToTheBest() {
-        val d = Progress.applyDecay(state(weeks = 9, idle = 21, xp = 2400), today) // xp now 1800
+        val d = Progress.applyDecay(state(weeks = 9, idle = 21, xp = 1600), today) // xp now 1200
         assertEquals(150, Progress.comebackBonus(d, 150))
-        assertEquals(100, Progress.comebackBonus(d.copy(xp = 2300), 150))
-        assertEquals(0, Progress.comebackBonus(d.copy(xp = 2400), 150))
+        assertEquals(100, Progress.comebackBonus(d.copy(xp = 1500), 150))
+        assertEquals(0, Progress.comebackBonus(d.copy(xp = 1600), 150))
     }
 }

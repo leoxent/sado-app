@@ -781,10 +781,10 @@ class ScreensTest {
     @Test fun focusGetsItsSets() {
         val b = my.sado.app.data.PlanBuilder
         val p = b.build(chest4, b.startingLadders(chest4))
-        // a 5/5 group gets 10+ direct sets over 2+ days, and the split changes to make room for it
+        // a 5/5 group gets 10+ direct sets over 2+ days
         org.junit.Assert.assertTrue(b.groupSets(p).getValue("chest") >= b.FOCUS_SETS)
         org.junit.Assert.assertTrue(b.groupDays(p).getValue("chest") >= 2)
-        org.junit.Assert.assertTrue("Push" in p.week)
+        // with short rests on small moves the week often fits chest without switching to a Push day, so the split is not asserted
         org.junit.Assert.assertEquals(emptyList<String>(), b.short(chest4, p))
         // a 1/5 group gets no more than it did at 3/5
         val low = chest4.copy(ratings = mapOf("chest" to 5, "lats" to 1))
@@ -796,7 +796,7 @@ class ScreensTest {
     @Test fun planSessions() {
         val p = my.sado.app.data.PlanBuilder.build(vshape4, my.sado.app.data.PlanBuilder.startingLadders(vshape4))
         org.junit.Assert.assertEquals(listOf("Pull", "Legs+Push", "Legs+Core"), p.sessions.map { it.tag })
-        p.sessions.forEach { s -> org.junit.Assert.assertEquals(5, s.exercises.size); org.junit.Assert.assertEquals(5, s.exercises.map { it.id }.toSet().size) }
+        p.sessions.forEach { s -> val n = s.exercises.size; org.junit.Assert.assertTrue(n >= my.sado.app.data.PlanBuilder.movesPer(vshape4)); org.junit.Assert.assertEquals(n, s.exercises.map { it.id }.toSet().size) }
         // each session is its own workout, not the same list again
         org.junit.Assert.assertEquals(3, p.sessions.map { s -> s.exercises.map { it.id }.toSet() }.distinct().size)
         // Thursday (Legs+Core) gets its own session; Saturday (rest) looks ahead to Monday's Pull

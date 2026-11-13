@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import my.sado.app.R
 import java.time.LocalDate
+import kotlin.math.roundToInt
 import java.time.temporal.ChronoUnit
 
 // 15 levels: 5 bodies × 3 tiers. Every level needs XP *and* weeks of training, so the character
@@ -36,7 +37,9 @@ object Progress {
         R.drawable.tier11, R.drawable.tier12, R.drawable.tier13, R.drawable.tier14, R.drawable.tier15,
     )
 
-    // weeks assume ~3 sessions a week; XP is ~300 per such week, so XP and time line up
+    // weeks assume ~3 sessions a week; a real 3-day week (a missed day, an unfinished move) earns ~190 XP of the
+    // 300 a perfect one would, so each week of the ladder asks for 200 and XP and time line up
+    const val XP_PER_WEEK = 200
     private val weeks = listOf(0, 1, 2, 4, 6, 8, 10, 13, 16, 20, 26, 32, 40, 52, 72)
     private val beastTests = listOf(30 to 10, 40 to 12, 50 to 15)
     val stages = ladder(weeks, heavy = false)
@@ -50,7 +53,7 @@ object Progress {
 
     private fun ladder(ws: List<Int>, heavy: Boolean) = ws.mapIndexed { i, w ->
         val test = if (i >= 12) beastTests[i - 12] else null
-        Stage(i, body = i / 3, tier = i % 3, at = w * 300, minWeeks = w, testPush = test?.first, testPull = test?.second, heavy = heavy)
+        Stage(i, body = i / 3, tier = i % 3, at = w * XP_PER_WEEK, minWeeks = w, testPush = test?.first, testPull = test?.second, heavy = heavy)
     }
 
     /** Big start: chosen in Settings, else the planner's "Berisi" answer, waist:height ≥ 0.53 or BMI ≥ 27. */
@@ -236,15 +239,18 @@ object Progress {
     const val XP_PER_SET = 10
 
     // full exercises earn 30; an unfinished one earns 10 per finished set; skipped ones earn nothing
-    fun sessionXp(plan: List<PlannedExercise>, logs: List<ExerciseLog>): Int =
-        logs.sumOf { log ->
-            val p = plan.firstOrNull { it.id == log.id } ?: return@sumOf 0
-            when {
-                log.skipped -> 0
-                log.sets.size >= p.sets -> XP_PER_EXERCISE
-                else -> XP_PER_SET * log.sets.size
-            }
-        }
+    // a whole planned session is worth this much however many moves it has, so a short honest plan levels as fast
+    // as a long one (the session length now follows the minutes chosen, not a fixed move count)
+    const val SESSION_XP = 100
+
+    fun sessionXp(plan: List<PlannedExercise>, logs: List<ExerciseLog>): Int {
+        if (plan.isEmpty()) return 0
+        val perMove = SESSION_XP.toDouble() / plan.size
+        return logs.sumOf { log ->
+            val p = plan.firstOrNull { it.id == log.id } ?: return@sumOf 0.0
+            if (log.skipped) 0.0 else perMove * minOf(log.sets.size, p.sets) / p.sets
+        }.roundToInt()
+    }
 
     fun activeDays(s: AppState): Set<Long> = (s.logs.map { it.epochDay } + s.sports.map { it.epochDay }).toSet()
 
@@ -404,7 +410,7 @@ object Progress {
             val effort = when {
                 sets.any { it.failed } -> 0
                 else -> sets.lastOrNull()?.rir ?: fallbackEffort(log.id, p, sets, history) ?: continue
-            }
+            }.let { if (it == 1 && ngamRun(log.id, p, sets, history)) 3 else it }
             val key = Catalog.ladderOf(log.id)
             val prog = key?.let { outL[it] } ?: LadderProgress()
             val rungs = key?.let { Catalog.ladders.getValue(it) }
@@ -430,6 +436,25 @@ object Progress {
         }
 
         return Climb(outL, outB, outK)
+    }
+
+    const val NGAM_RUN = 3
+    const val NGAM_COOLDOWN_DAYS = 28
+
+    /**
+     * "Ngam" [NGAM_RUN] sessions running, every set done in full each time: the body has moved on even when the
+     * answer hasn't (the research run had "always Ngam" users never climb a ladder), so the third counts as Easy.
+     * A set given up on this move in the last [NGAM_COOLDOWN_DAYS] days locks it: the last push was too much, so the
+     * target waits for a real Easy answer (the research run had auto +1 alone fail 11% of sets).
+     */
+    fun ngamRun(id: String, p: PlannedExercise, sets: List<SetLog>, history: List<WorkoutLog>): Boolean {
+        fun full(s: List<SetLog>, target: Int?) = s.isNotEmpty() && s.none { it.failed } && s.last().rir == 1 && (target == null || s.all { it.reps >= target })
+        if (!full(sets, p.target)) return false
+        val before = history.filter { l -> !l.mini && l.exercises.any { it.id == id && !it.skipped && it.sets.isNotEmpty() } }
+            .takeLast(NGAM_RUN - 1).map { l -> Integrity.real(l.exercises.first { it.id == id && !it.skipped && it.sets.isNotEmpty() }) }
+        if (before.size < NGAM_RUN - 1 || !before.all { full(it, null) }) return false
+        val last = history.lastOrNull()?.epochDay ?: return true
+        return history.none { l -> l.epochDay > last - NGAM_COOLDOWN_DAYS && l.exercises.any { it.id == id && it.sets.any { s -> s.failed } } }
     }
 
     /**

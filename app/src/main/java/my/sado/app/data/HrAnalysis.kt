@@ -84,7 +84,7 @@ object HrAnalysis {
             }
         }
         val avg = points.map { it.bpm }.average().toInt()
-        return Report(avg, points.maxOf { it.bpm }, points.size, dense, zones, sets, resting?.let { avg >= it + Integrity.HR_OVER_REST })
+        return Report(avg, points.maxOf { it.bpm }, points.size, dense, zones, sets, resting?.let { avg >= it + Integrity.HR_FLAT })
     }
 
     /**
@@ -116,7 +116,7 @@ object HrAnalysis {
     fun withHr(log: WorkoutLog, pts: List<HrPoint>, source: String, resting: Int?, p: Profile?): WorkoutLog {
         val avg = pts.map { it.bpm }.average().toInt()
         val seconds = log.seconds ?: (log.minutes * 60)
-        val kcal = if (p != null) Burn.hrKcal(avg, p, seconds).takeIf { it > 0 } else null
+        val kcal = if (p != null) Burn.hrKcal(avg, p, seconds).takeIf { it > 0 }?.let { Burn.blend(it, Burn.metKcal(Burn.met(log.exercises), p.weightKg, seconds)) } else null
         // enough readings and the heart stayed at rest the whole time: the reps can't have been real
         val flat = pts.size >= 10 && resting != null && Integrity.hrFlat(avg, resting) && !log.doubtful
         return HrStore.put(log, pts).copy(
