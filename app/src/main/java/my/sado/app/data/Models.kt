@@ -121,6 +121,7 @@ data class WorkoutLog(
     val restingHr: Int? = null, // resting HR when the readings came in, for the zones
     val climbed: Map<String, String> = emptyMap(), // ladder rungs this session earned: move done to the next move
     val kgNext: Map<String, Float> = emptyMap(), // weighted moves whose load went up: move to its next kg
+    val extra: Boolean = false, // Sesi tambahan: a plan session picked on a rest day
 )
 
 @Serializable

@@ -53,7 +53,7 @@ import my.sado.app.data.Store
 import java.time.LocalDate
 
 @Composable
-fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Unit, onJourney: () -> Unit, onSport: () -> Unit, onTest: () -> Unit, onHealth: () -> Unit, onSettings: () -> Unit = {}, onPet: () -> Unit = {}, onRest: () -> Unit = {}, onHealthCheck: () -> Unit = {}, onPetEvolve: () -> Unit = {}, onMini: () -> Unit = {}, onHistory: () -> Unit = {}, onLog: (Int) -> Unit = {}) {
+fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Unit, onJourney: () -> Unit, onSport: () -> Unit, onTest: () -> Unit, onHealth: () -> Unit, onSettings: () -> Unit = {}, onPet: () -> Unit = {}, onRest: () -> Unit = {}, onHealthCheck: () -> Unit = {}, onPetEvolve: () -> Unit = {}, onMini: () -> Unit = {}, onHistory: () -> Unit = {}, onLog: (Int) -> Unit = {}, onExtra: (String) -> Unit = {}) {
     val s = Store.state.collectAsState().value
     var feeding by remember { mutableStateOf<PetFeed?>(null) }
     var heroWidth by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -306,7 +306,13 @@ fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Uni
                 }
             }
             if (s.answers?.pull == -1) Callout("Nak belakang lebar?", "Pull-up bar pintu (RM40–80) paling berbaloi untuk V-shape. Untuk kaki, isi beg galas dengan buku sebagai beban.", SadoColors.Violet, Modifier.appear(n++))
-            Box(Modifier.appear(n++)) { PrimaryButton(if (doneToday) "WORKOUT LAGI" else "START WORKOUT", onClick = onStart) }
+            // a rest day: training anyway is a Sesi tambahan, and the user picks which plan session
+            var pickExtra by remember { mutableStateOf(false) }
+            if (pickExtra) ExtraSessionDialog(s, onPick = { pickExtra = false; onExtra(it) }, onDismiss = { pickExtra = false })
+            Box(Modifier.appear(n++)) {
+                if (tag == "Rest") PrimaryButton("SESI TAMBAHAN") { pickExtra = true }
+                else PrimaryButton(if (doneToday) "WORKOUT LAGI" else "START WORKOUT", onClick = onStart)
+            }
             // a hard day: a short real session, or an honest rest, both better than tapping through
             if (!doneToday) Row(Modifier.fillMaxWidth().appear(n++), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SecondaryButton("Sesi mini · 10 min", Modifier.weight(1f), onClick = onMini)

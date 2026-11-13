@@ -259,6 +259,7 @@ private fun SadoNav(nav: NavHostController, start: String) {
                 onHealth = { nav.navigate("health") }, onSettings = { nav.navigate("settings") }, onPet = { nav.navigate("pet") },
                 onRest = { nav.navigate("rest") }, onHealthCheck = { nav.navigate("healthcheck") }, onPetEvolve = { nav.navigate("pet-evolve") },
                 onMini = { nav.navigate("session/mini:plan") },
+                onExtra = { nav.navigate("preview/extra:" + android.net.Uri.encode(it)) },
                 onHistory = { nav.navigate("history") }, onLog = { nav.navigate("log/$it") },
             )
         }

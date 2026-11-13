@@ -99,9 +99,11 @@ fun sessionFor(source: String, quizGear: Boolean = false): Pair<String, List<Pla
         val t = Templates.all.first { it.id == src.removePrefix("tpl:") }
         t.name to Templates.session(t, s.answers, s.ladders).map { Progress.boosted(it, s.boosts, s.extraSets) }
     } else {
-        val today = s.plan?.sessionOn()
+        // "extra:<tag>": Sesi tambahan, a plan session the user picked on a rest day
+        val extra = src.removePrefix("extra:").takeIf { src.startsWith("extra:") }
+        val today = s.plan?.let { p -> extra?.let { t -> p.allSessions.firstOrNull { it.tag == t } } ?: p.sessionOn() }
         val ex = today?.exercises.orEmpty()
-        (today?.label ?: "Sesi") to (s.answers?.let { PlanBuilder.refresh(ex, it, s.ladders) } ?: ex).map { Progress.boosted(it, s.boosts, s.extraSets) }
+        (today?.label?.let { if (extra != null) "Sesi tambahan · $it" else it } ?: "Sesi") to (s.answers?.let { PlanBuilder.refresh(ex, it, s.ladders) } ?: ex).map { Progress.boosted(it, s.boosts, s.extraSets) }
     }
     // gear changed for today: swap the moves that need what is not here, the stand-ins with their own earned reps
     val gear = gearToday(s).takeIf { !quizGear }
@@ -224,7 +226,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 peakXp = maxOf(s.peakXp, s.xp + xp + bonus),
                 logs = s.logs + WorkoutLog(
                     LocalDate.now().toEpochDay(), title, minutes, all, xp + bonus, p.quit, p.avg, p.hr.maxOfOrNull { it.bpm }, bonus,
-                    seconds = seconds, kcal = kcal, kcalSource = kcalSource, startMs = startedAt, endMs = end, doubtful = accepted, mini = mini,
+                    seconds = seconds, kcal = kcal, kcalSource = kcalSource, startMs = startedAt, endMs = end, doubtful = accepted, mini = mini, extra = source.removePrefix("mini:").startsWith("extra:"),
                 ).let { if (p.hr.size >= HrAnalysis.MIN_POINTS) HrAnalysis.withHr(it, p.hr, "Broadcast", restingHr, s.profile) else it }
                     .let { SessionSummary.ups(s.ladders, c.ladders, s.loads, c.loads, all).let { u -> it.copy(climbed = u.climbed, kgNext = u.kgNext) } },
                 ladders = c.ladders,
@@ -731,6 +733,7 @@ fun DoneScreen(onHome: () -> Unit) {
                 onNever = { stopShown = false; Store.update { it.copy(settings = it.settings.copy(remindWatchStop = false)) } },
             )
         }
+        ReviewCard(log, s.logs.dropLast(1), s.plan)
         SummaryCard(log, s.logs.dropLast(1))
         HrReportCard(log, waiting = s.settings.healthConnect)
         NewAchievements(fresh)

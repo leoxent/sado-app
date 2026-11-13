@@ -114,6 +114,7 @@ fun SessionLogScreen(index: Int, onBack: () -> Unit) {
                 color = SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.Bold,
             )
         }
+        ReviewCard(log, s.logs.take(index), s.plan)
         SummaryCard(log, s.logs.take(index))
         // a session from the last few days may still be waiting for the watch to sync
         val recent = log.endMs != null && System.currentTimeMillis() - log.endMs < 3 * 86_400_000L

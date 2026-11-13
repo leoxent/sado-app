@@ -103,6 +103,46 @@ class ScreensTest {
                 ))
         }
     }) { DoneScreen(onHome = {}) }
+    private fun upperLowerPlan(week: List<String>) = my.sado.app.data.Plan(
+        "t", "w", emptyList(), week, "Upper", emptyList(),
+        listOf(
+            my.sado.app.data.PlanSession("Upper", "Upper body", listOf(my.sado.app.data.PlannedExercise("push", 3, "10", 10), my.sado.app.data.PlannedExercise("pullup", 3, "6", 6))),
+            my.sado.app.data.PlanSession("Lower", "Lower body", listOf(my.sado.app.data.PlannedExercise("squat", 3, "15", 15), my.sado.app.data.PlannedExercise("calf", 3, "20", 20))),
+        ),
+    )
+    @Test fun reviewCard() = shot("review") {
+        val today = LocalDate.now()
+        val earlier = listOf(WorkoutLog(today.toEpochDay() - 7, "Upper", 22, listOf(ExerciseLog("push", listOf(SetLog(10), SetLog(10))), ExerciseLog("pullup", listOf(SetLog(7), SetLog(6)))), 30, false))
+        val log = WorkoutLog(
+            today.toEpochDay(), "Upper body", 24,
+            listOf(
+                ExerciseLog("push", listOf(SetLog(13), SetLog(11), SetLog(10))),
+                ExerciseLog("pullup", listOf(SetLog(6), SetLog(5))),
+                ExerciseLog("pike", emptyList(), true),
+                ExerciseLog("lateral", listOf(SetLog(12, flagged = true), SetLog(12))),
+            ),
+            40, false, seconds = 1_480, climbed = mapOf("push" to "decline"),
+        )
+        val hr = my.sado.app.data.HrAnalysis.Report(
+            134, 171, 300, true,
+            mapOf(my.sado.app.data.HrAnalysis.State.Workout to 1000, my.sado.app.data.HrAnalysis.State.Active to 400),
+            listOf(my.sado.app.data.HrAnalysis.SetHr("push", 1, 160, 27), my.sado.app.data.HrAnalysis.SetHr("push", 2, 166, 22)), true,
+        )
+        val plan = upperLowerPlan(List(7) { i -> if (i == today.plusDays(1).dayOfWeek.value - 1) "Lower" else "Upper" })
+        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) {
+            my.sado.app.ui.ReviewLines(my.sado.app.data.SessionReview.sentences(log, earlier, plan, hr))
+        }
+    }
+    @Test fun extraPicker() = shot("extrapicker", {
+        Store.update {
+            val today = LocalDate.now()
+            val week = List(7) { i -> when (i) { today.dayOfWeek.value - 1 -> "Rest"; today.plusDays(1).dayOfWeek.value - 1 -> "Upper"; else -> "Lower" } }
+            it.copy(
+                plan = upperLowerPlan(week),
+                logs = it.logs + WorkoutLog(today.toEpochDay() - 1, "Lower body", 20, listOf(ExerciseLog("squat", listOf(SetLog(15), SetLog(15)))), 30, false),
+            )
+        }
+    }) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) { my.sado.app.ui.ExtraSessionPicker(Store.state.value, onPick = {}) } }
     private fun historySetup() = Store.update {
         val today = LocalDate.now().toEpochDay()
         val start = System.currentTimeMillis() - 3_600_000L
