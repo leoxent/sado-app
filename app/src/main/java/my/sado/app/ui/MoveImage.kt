@@ -1,6 +1,7 @@
 package my.sado.app.ui
 
 import android.content.Context
+import my.sado.app.R
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
@@ -105,13 +106,27 @@ object MoveImages {
         "bpsquat" to fedb("Goblet_Squat"),
         "bprdl" to fedb("Stiff-Legged_Dumbbell_Deadlift"),
         "highknee" to wger("983/16245344-9957-4a24-8d61-f9939ed5f964.png"),
+        // harder or homemade versions of a move that has pictures: same form, so the same pictures
+        "wpush" to fedb("Pushups"),
+        "tempopush" to fedb("Pushups"),
+        "wpullup" to fedb("Weighted_Pull_Ups"),
+        "archerpull" to fedb("Pullups"),
+        "bandpull" to fedb("Wide-Grip_Lat_Pulldown"),
+        "towelrow" to fedb("Inverted_Row_with_Straps"),
+        "doorrow" to fedb("Inverted_Row_with_Straps"),
+        "towelcurl" to fedb("Dumbbell_Bicep_Curl"),
+        "wpistol" to fedb("Kettlebell_Pistol_Squat"),
     )
 
-    // our own character doing the move, shipped in the APK
-    val local: Map<String, Int> = mapOf(
-        "squat" to my.sado.app.R.drawable.char_squat,
-        "plank" to my.sado.app.R.drawable.char_plank,
-        "bridge" to my.sado.app.R.drawable.char_bridge,
+    // our own drawings, shipped in the APK; several frames flip like the downloaded ones
+    val local: Map<String, List<Int>> = mapOf(
+        "squat" to listOf(R.drawable.char_squat),
+        "plank" to listOf(R.drawable.char_plank),
+        "bridge" to listOf(R.drawable.char_bridge),
+        "burpee" to listOf(R.drawable.move_burpee_1, R.drawable.move_burpee_2, R.drawable.move_burpee_3, R.drawable.move_burpee_4),
+        "wallsit" to listOf(R.drawable.move_wallsit_1),
+        "shrimp" to listOf(R.drawable.move_shrimp_1, R.drawable.move_shrimp_2),
+        "boxing" to listOf(R.drawable.move_boxing_1, R.drawable.move_boxing_2, R.drawable.move_boxing_1, R.drawable.move_boxing_3),
     )
 
     fun has(id: String) = id in urls || id in local
@@ -144,16 +159,20 @@ object MoveImages {
 /** Picture of the move; two-frame pictures flip between start and end position so the motion is clear. */
 @Composable
 fun MoveImage(id: String, modifier: Modifier = Modifier) {
+    val reduce = LocalReduceMotion.current
     MoveImages.local[id]?.let { res ->
+        var frame by remember(id) { mutableIntStateOf(0) }
+        LaunchedEffect(id, reduce) {
+            while (res.size > 1 && !reduce) { delay(900); frame = (frame + 1) % res.size }
+        }
         Box(modifier.fillMaxWidth().aspectRatio(1.6f).clip(RoundedCornerShape(24.dp)).background(Color.White), contentAlignment = Alignment.Center) {
-            Image(androidx.compose.ui.res.painterResource(res), contentDescription = "Cara buat move ni", Modifier.fillMaxWidth().padding(16.dp), contentScale = ContentScale.Fit)
+            Image(androidx.compose.ui.res.painterResource(res[frame % res.size]), contentDescription = "Cara buat move ni", Modifier.fillMaxWidth().padding(16.dp), contentScale = ContentScale.Fit)
         }
         return
     }
     val urls = MoveImages.urlsFor(id)
     if (urls.isEmpty()) return
     val context = LocalContext.current
-    val reduce = LocalReduceMotion.current
     var frames by remember(id) { mutableStateOf<List<Bitmap>>(emptyList()) }
     var failed by remember(id) { mutableStateOf(false) }
     var frame by remember(id) { mutableIntStateOf(0) }

@@ -58,7 +58,8 @@ fun VoiceReportChip(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val parts by VoiceClips.missing.collectAsState()
     val line = parts?.takeIf { it.isNotEmpty() }?.joinToString(" ") { it.replace(Regex("^\\[[^\\]]+]\\s*"), "") }
-    val voiceId = Store.state.collectAsState().value.settings.voiceId
+    val chosen = Store.state.collectAsState().value.settings.voiceId
+    val voiceId = VoiceClips.missingVoice ?: chosen
     var state by remember { mutableStateOf<ReportState>(ReportState.Idle) }
 
     // a new line resets the chip; an untouched chip goes away by itself after 8 s

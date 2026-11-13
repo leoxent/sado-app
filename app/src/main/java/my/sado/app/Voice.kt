@@ -68,6 +68,13 @@ object Coach {
         .replace(Regex("(\\d+)°")) { "${malay(it.groupValues[1].toInt())} darjah" }
         .replace(Regex("\\d+")) { malay(it.value.toInt()) }
 
+    // AI voice on: the chosen voice. Off: the voice shipped in the APK, whose missing lines can be made too
+    private fun activeVoice(st: my.sado.app.data.Settings): String? = when {
+        !::app.isInitialized -> null
+        st.aiVoice -> st.voiceId
+        else -> VoiceClips.bundledVoice(app)
+    }
+
     /** Says one of the variants at random so repeated lines don't sound robotic. */
     fun say(options: List<String>) = say(options.random())
 
@@ -77,11 +84,11 @@ object Coach {
         val text = words(line)
         // AI voice: play the cached clip; first time a line is heard it falls back to TTS and the clip is fetched for next time
         // the clips shipped in the APK need no key, so they play with AI voice off too
-        if (!st.aiVoice && ::app.isInitialized) VoiceClips.bundledVoice(app)?.let { if (VoiceClips.play(app, it, text)) { tts?.stop(); return } }
-        if (st.aiVoice && ::app.isInitialized) {
-            if (VoiceClips.play(app, st.voiceId, text)) { tts?.stop(); return }
+        val voice = activeVoice(st)
+        if (voice != null) {
+            if (VoiceClips.play(app, voice, text)) { tts?.stop(); return }
             // no clip yet: the phone voice speaks and the report chip offers to make the AI one
-            if (!VoiceClips.creditOut && Secrets.load(app, "elevenlabs") != null) VoiceClips.missing.value = listOf(text)
+            VoiceClips.report(app, voice, listOf(text))
         }
         if (!ready) return
         VoiceClips.stop()
@@ -99,11 +106,10 @@ object Coach {
         val st = Store.state.value.settings
         if (!st.voice) return
         val texts = parts.map { words(it) }
-        if (!st.aiVoice && ::app.isInitialized) VoiceClips.bundledVoice(app)?.let { if (VoiceClips.playChain(app, it, texts)) { tts?.stop(); return } }
-        if (st.aiVoice && ::app.isInitialized) {
-            if (VoiceClips.playChain(app, st.voiceId, texts)) { tts?.stop(); return }
-            val gone = texts.filterNot { VoiceClips.has(app, st.voiceId, it) }
-            if (!VoiceClips.creditOut && Secrets.load(app, "elevenlabs") != null) VoiceClips.missing.value = gone
+        val voice = activeVoice(st)
+        if (voice != null) {
+            if (VoiceClips.playChain(app, voice, texts)) { tts?.stop(); return }
+            VoiceClips.report(app, voice, texts.filterNot { VoiceClips.has(app, voice, it) })
         }
         if (!ready) return
         VoiceClips.stop()
@@ -356,6 +362,15 @@ object VoiceClips {
 
     /** Last line that played with the phone voice because it had no clip; the report chip watches this. */
     val missing = kotlinx.coroutines.flow.MutableStateFlow<List<String>?>(null)
+    /** The voice the missing lines belong to: the chosen AI voice, or the default one shipped in the APK. */
+    @Volatile var missingVoice: String? = null
+
+    /** Shows the chip that offers to make [texts] in [voiceId]; needs a key and credit left. */
+    fun report(context: Context, voiceId: String, texts: List<String>) {
+        if (texts.isEmpty() || creditOut || Secrets.load(context, "elevenlabs") == null) return
+        missingVoice = voiceId
+        missing.value = texts
+    }
 
     /** Set when ElevenLabs says the credit is used up, so the report chip stays hidden until a generate works again. */
     @Volatile var creditOut = false
