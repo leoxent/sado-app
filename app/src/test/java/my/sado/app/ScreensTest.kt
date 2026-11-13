@@ -103,6 +103,23 @@ class ScreensTest {
                 ))
         }
     }) { DoneScreen(onHome = {}) }
+    private fun historySetup() = Store.update {
+        val today = LocalDate.now().toEpochDay()
+        val start = System.currentTimeMillis() - 3_600_000L
+        val hr = (0 until 240).map { my.sado.app.data.HrPoint(start + it * 5_000L, 95 + (it % 24) * 3) }
+        val last = my.sado.app.data.HrStore.put(
+            WorkoutLog(
+                today, "Pull day", 25,
+                listOf(ExerciseLog("pullup", listOf(SetLog(8), SetLog(7), SetLog(6))), ExerciseLog("lateral", listOf(SetLog(12), SetLog(12)))),
+                45, false, kcal = 180, kcalSource = "HR jam", seconds = 1_520, startMs = start, endMs = start + 1_200_000, hrSource = "Broadcast", restingHr = 62,
+            ),
+            hr,
+        )
+        it.copy(logs = it.logs + WorkoutLog(today - 40, "Push day", 20, listOf(ExerciseLog("push", listOf(SetLog(12)))), 30, false) +
+            WorkoutLog(today - 2, "Legs + Core", 18, listOf(ExerciseLog("squat", listOf(SetLog(20), SetLog(18)))), 35, true) + last)
+    }
+    @Test fun history() = shot("history", ::historySetup) { my.sado.app.ui.HistoryScreen({}, {}) }
+    @Test fun sessionLog() = shot("sessionlog", ::historySetup) { my.sado.app.ui.SessionLogScreen(Store.state.value.logs.lastIndex) {} }
     @Test fun squatPic() = shot("squatpic") { my.sado.app.ui.ExerciseDetailScreen("squat") {} }
     @Test fun session() = shot("session") { my.sado.app.ui.SessionScreen("plan", {}, {}, {}) }
     @Test fun sessionLong() = shot("sessionlong", { my.sado.app.data.Store.update { s -> s.copy(plan = s.plan?.mapExercises { ex -> listOf(ex.first().copy(id = "kneeraise")) + ex.drop(1) }) } }) {

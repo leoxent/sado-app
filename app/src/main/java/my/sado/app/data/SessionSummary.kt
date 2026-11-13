@@ -45,6 +45,21 @@ object SessionSummary {
         )
     }
 
+    /** For each session in order, how many moves set a new best; one pass, so a long history stays quick. */
+    fun recordCounts(logs: List<WorkoutLog>): List<Int> {
+        val top = mutableMapOf<String, Int>()
+        return logs.map { log ->
+            var n = 0
+            log.exercises.filter { !it.skipped }.forEach { e ->
+                val mine = best(e) ?: return@forEach
+                val prev = top[e.id]
+                if (prev != null && mine > prev) n++
+                if (prev == null || mine > prev) top[e.id] = mine
+            }
+            n
+        }
+    }
+
     /** What this session moved up: ladder rungs (from move to next move) and loads (move to its next kg). */
     data class Ups(val climbed: Map<String, String>, val kgNext: Map<String, Float>)
 

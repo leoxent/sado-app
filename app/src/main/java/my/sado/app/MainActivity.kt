@@ -256,10 +256,15 @@ private fun SadoNav(nav: NavHostController, start: String) {
                 onHealth = { nav.navigate("health") }, onSettings = { nav.navigate("settings") }, onPet = { nav.navigate("pet") },
                 onRest = { nav.navigate("rest") }, onHealthCheck = { nav.navigate("healthcheck") }, onPetEvolve = { nav.navigate("pet-evolve") },
                 onMini = { nav.navigate("session/mini:plan") },
+                onHistory = { nav.navigate("history") }, onLog = { nav.navigate("log/$it") },
             )
         }
         composable("pet") { my.sado.app.ui.PetScreen(onEvolve = { nav.navigate("pet-evolve") }, onBack = { nav.popBackStack() }) }
         composable("pet-evolve") { my.sado.app.ui.PetEvolveScreen(onHome = { if (!nav.popBackStack("home", false)) nav.navigate("home") }, onBack = { nav.popBackStack() }) }
+        composable("history") { my.sado.app.ui.HistoryScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("log/$it") }) }
+        composable("log/{i}", listOf(navArgument("i") { type = NavType.IntType })) {
+            my.sado.app.ui.SessionLogScreen(it.arguments?.getInt("i") ?: -1, onBack = { nav.popBackStack() })
+        }
         composable("journey") { JourneyScreen(onBack = { nav.popBackStack() }) }
         composable("rekod") { CalendarScreen(onTest = { nav.navigate("test") }, onSport = { nav.navigate("sport") }, onAchievements = { nav.navigate("achievements") }) }
         composable("achievements") { my.sado.app.ui.AchievementsScreen(onBack = { nav.popBackStack() }) }

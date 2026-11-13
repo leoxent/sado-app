@@ -115,7 +115,8 @@ data class WorkoutLog(
     val endMs: Long? = null,
     val doubtful: Boolean = false, // the quick-session check fired and the user said they did it
     val mini: Boolean = false, // Sesi mini: one set per move, counts for streak and pet but not progression
-    val hr: List<HrPoint> = emptyList(), // readings during the session, from the broadcast or Health Connect
+    val hr: List<HrPoint> = emptyList(), // readings kept inline by 0.44 saves; newer ones live in HrStore's files
+    val hrPoints: Int = 0, // how many readings HrStore holds for this session
     val hrSource: String? = null, // "Broadcast" or "Health Connect"
     val restingHr: Int? = null, // resting HR when the readings came in, for the zones
     val climbed: Map<String, String> = emptyMap(), // ladder rungs this session earned: move done to the next move

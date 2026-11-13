@@ -95,7 +95,7 @@ object HrAnalysis {
         val s = Store.state.value
         if (!s.settings.healthConnect || !Health.available(context)) return
         val now = System.currentTimeMillis()
-        val todo = s.logs.filter { it.hr.isEmpty() && it.startMs != null && it.endMs != null && now - it.endMs < 3 * 86_400_000L }
+        val todo = s.logs.filter { !HrStore.hasHr(it) && it.startMs != null && it.endMs != null && now - it.endMs < 3 * 86_400_000L }
         if (todo.isEmpty()) return
         val resting = Health.restingEstimate(context)
         val p = s.profile
@@ -119,8 +119,8 @@ object HrAnalysis {
         val kcal = if (p != null) Burn.hrKcal(avg, p, seconds).takeIf { it > 0 } else null
         // enough readings and the heart stayed at rest the whole time: the reps can't have been real
         val flat = pts.size >= 10 && resting != null && Integrity.hrFlat(avg, resting) && !log.doubtful
-        return log.copy(
-            hr = pts, hrSource = source, restingHr = resting, avgHr = avg, maxHr = pts.maxOf { it.bpm },
+        return HrStore.put(log, pts).copy(
+            hrSource = source, restingHr = resting, avgHr = avg, maxHr = pts.maxOf { it.bpm },
             kcal = kcal ?: log.kcal, kcalSource = if (kcal != null) "HR jam" else log.kcalSource,
             doubtful = log.doubtful || flat,
             exercises = if (flat) log.exercises.map { e -> e.copy(sets = e.sets.map { it.copy(flagged = true) }) } else log.exercises,

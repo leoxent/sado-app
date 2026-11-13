@@ -38,6 +38,7 @@ object Backup {
         val zipped = ByteArrayOutputStream().also { out ->
             ZipOutputStream(out).use { zip ->
                 zip.putNextEntry(ZipEntry("state.json")); zip.write(Store.exportText().toByteArray()); zip.closeEntry()
+                HrStore.files().forEach { f -> zip.putNextEntry(ZipEntry("hr/${f.name}")); f.inputStream().use { it.copyTo(zip) }; zip.closeEntry() }
                 File(context.filesDir, "photos").listFiles()?.forEach { f ->
                     zip.putNextEntry(ZipEntry("photos/${f.name}")); f.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
                 }
@@ -67,6 +68,7 @@ object Backup {
         }.getOrElse { return Result.WrongPassword }
         var state: String? = null
         val photos = mutableMapOf<String, ByteArray>()
+        val hr = mutableMapOf<String, ByteArray>()
         ZipInputStream(ByteArrayInputStream(zipped)).use { zip ->
             generateSequence { zip.nextEntry }.forEach { e ->
                 val data = zip.readBytes()
@@ -74,10 +76,12 @@ object Backup {
                     e.name == "state.json" -> state = String(data)
                     // keep only plain file names so a crafted archive can't write outside photos/
                     e.name.startsWith("photos/") && !e.name.contains("..") -> photos[e.name.removePrefix("photos/").substringAfterLast('/')] = data
+                    e.name.startsWith("hr/") && !e.name.contains("..") -> hr[e.name.substringAfterLast('/')] = data
                 }
             }
         }
         val text = state ?: return Result.NotSado
+        hr.forEach { (name, data) -> HrStore.restoreFile(name, data) } // before the state, so its sessions find their readings
         Store.restore(text)
         val dir = File(context.filesDir, "photos").apply { mkdirs() }
         photos.forEach { (name, data) -> if (name.isNotBlank()) File(dir, name).writeBytes(data) }

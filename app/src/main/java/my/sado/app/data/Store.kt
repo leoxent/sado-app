@@ -16,6 +16,7 @@ object Store {
 
     fun init(context: Context) {
         file = File(context.filesDir, "sado_state.json")
+        HrStore.init(context.filesDir)
         if (file.exists()) {
             _state.value = migrate(runCatching { json.decodeFromString<AppState>(file.readText()) }.getOrDefault(AppState()))
             dropTiers()
@@ -36,7 +37,7 @@ object Store {
     private fun migrate(state: AppState): AppState {
         // 5 → 15 levels: old Kurus/Berisi/Fit/Sado/Beast map to tier I of the same body
         val s0 = if (state.levelFloor >= 0) state else state.copy(levelFloor = Progress.oldLevel(state) * 3)
-        val s = Pets.migrate(s0.copy(peakXp = maxOf(s0.peakXp, s0.xp), answers = s0.answers?.let(::splitDelts)))
+        val s = Pets.migrate(s0.copy(peakXp = maxOf(s0.peakXp, s0.xp), answers = s0.answers?.let(::splitDelts), logs = HrStore.moveOut(s0.logs)))
         // a plan from an older builder is rebuilt once from the saved answers; ladders and progress stay
         if (s.plan != null && s.answers != null && s.planBuilt < PlanBuilder.VERSION)
             return s.copy(plan = PlanBuilder.build(s.answers, s.ladders), planBuilt = PlanBuilder.VERSION)

@@ -53,7 +53,7 @@ import my.sado.app.data.Store
 import java.time.LocalDate
 
 @Composable
-fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Unit, onJourney: () -> Unit, onSport: () -> Unit, onTest: () -> Unit, onHealth: () -> Unit, onSettings: () -> Unit = {}, onPet: () -> Unit = {}, onRest: () -> Unit = {}, onHealthCheck: () -> Unit = {}, onPetEvolve: () -> Unit = {}, onMini: () -> Unit = {}) {
+fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Unit, onJourney: () -> Unit, onSport: () -> Unit, onTest: () -> Unit, onHealth: () -> Unit, onSettings: () -> Unit = {}, onPet: () -> Unit = {}, onRest: () -> Unit = {}, onHealthCheck: () -> Unit = {}, onPetEvolve: () -> Unit = {}, onMini: () -> Unit = {}, onHistory: () -> Unit = {}, onLog: (Int) -> Unit = {}) {
     val s = Store.state.collectAsState().value
     var feeding by remember { mutableStateOf<PetFeed?>(null) }
     var heroWidth by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -328,21 +328,15 @@ fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Uni
 
         if (s.logs.isNotEmpty()) {
             Label("Sesi terkini")
-            s.logs.takeLast(3).reversed().forEach { log ->
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface).border(1.dp, SadoColors.Outline, RoundedCornerShape(20.dp)).padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(SadoColors.Accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                        Icon(SadoIcons.Dumbbell, null, tint = SadoColors.Accent, modifier = Modifier.size(22.dp))
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(log.title, color = SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        Text("${LocalDate.ofEpochDay(log.epochDay)} · ${log.minutes} min" + if (log.quit) " · stop awal" else "", color = SadoColors.TextMuted, fontSize = 13.sp)
-                    }
-                    Text("+${log.xp}", color = SadoColors.Accent, fontSize = 20.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
-                }
+            val records = remember(s.logs) { my.sado.app.data.SessionSummary.recordCounts(s.logs) }
+            s.logs.indices.toList().takeLast(3).reversed().forEach { i ->
+                LogRow(s.logs[i], records.getOrElse(i) { 0 }) { onLog(i) }
             }
+            Text(
+                "Semua sesi (${s.logs.size}) \u2192",
+                color = SadoColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth().pressable(onClick = onHistory).padding(vertical = 10.dp),
+            )
         }
         Box(Modifier.height(8.dp))
     }

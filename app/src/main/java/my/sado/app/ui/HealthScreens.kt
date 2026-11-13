@@ -172,7 +172,8 @@ private fun agoText(ms: Long): String {
 @Composable
 fun HrReportCard(log: WorkoutLog, waiting: Boolean) {
     val p = Store.state.collectAsState().value.profile
-    val r = HrAnalysis.analyze(log.hr, log.exercises, log.restingHr, p?.age ?: 25)
+    val pts = remember(log) { my.sado.app.data.HrStore.points(log) }
+    val r = HrAnalysis.analyze(pts, log.exercises, log.restingHr, p?.age ?: 25)
     if (r == null) {
         if (waiting && log.startMs != null) Card {
             Text("Heart rate", color = SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)

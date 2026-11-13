@@ -687,7 +687,7 @@ fun DoneScreen(onHome: () -> Unit) {
     LaunchedEffect(log.startMs) {
         if (!s.settings.healthConnect || log.startMs == null) return@LaunchedEffect
         repeat(20) {
-            if (Store.state.value.logs.lastOrNull()?.hr?.isNotEmpty() == true) return@LaunchedEffect
+            if (Store.state.value.logs.lastOrNull()?.let { my.sado.app.data.HrStore.hasHr(it) } == true) return@LaunchedEffect
             runCatching { HrAnalysis.backfill(context) }
             kotlinx.coroutines.delay(30_000)
         }
@@ -740,7 +740,7 @@ fun DoneScreen(onHome: () -> Unit) {
 
 /** Per move: what was done, a record, the change since last time, sets that didn't count, and what goes up next. */
 @Composable
-private fun SummaryCard(log: WorkoutLog, earlier: List<WorkoutLog>) {
+internal fun SummaryCard(log: WorkoutLog, earlier: List<WorkoutLog>) {
     val rows = remember(log) { SessionSummary.rows(log, earlier) }
     if (rows.isEmpty()) return
     // muscles by the sets that counted; helpers count half, as on the plan
