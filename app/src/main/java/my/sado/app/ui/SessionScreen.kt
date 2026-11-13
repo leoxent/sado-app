@@ -291,6 +291,8 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 if (camSupported) CameraToggle(settings.cameraReps) { v -> Store.update { it.copy(settings = it.settings.copy(cameraReps = v)) } }
                 // camera stays outside key() so it isn't rebound every set
                 if (!camOn) MoveImage(cur.id)
+                // which muscles this set works, front and back, right where the set is done
+                MoveMuscles(cur.id)
                 if (camOn) PoseCamera(cur.id, onRep = { if (!move.timed && phase == Phase.Work) { reps++; Feedback.rep() } })
                 key(idx, sets.size, cur.id) {
                     if (move.timed) TimedSet(target) { secs -> reps = secs }
@@ -640,17 +642,10 @@ internal fun NextUp(label: String, e: PlannedExercise) {
     Card {
         Label(label)
         if (MoveImages.ready(LocalContext.current, e.id)) MoveImage(e.id)
-        else Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface2).padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            MuscleMap(m.muscles, m.secondary, back = false, modifier = Modifier.size(width = 64.dp, height = 136.dp))
-            MuscleMap(m.muscles, m.secondary, back = true, modifier = Modifier.size(width = 64.dp, height = 136.dp))
-        }
+        MoveMuscles(e.id)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(m.name, color = SadoColors.Text, fontSize = 20.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
-                Text(m.muscles.joinToString(" · ") { Catalog.muscleNames.getValue(it) }, color = SadoColors.TextMuted, fontSize = 13.sp)
             }
             Text("${e.sets} × ${e.reps}", color = SadoColors.Accent, fontSize = 20.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
         }
@@ -789,6 +784,35 @@ internal fun SummaryCard(log: WorkoutLog, earlier: List<WorkoutLog>) {
             Text("Naik lepas ni", color = SadoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             log.climbed.forEach { (from, to) -> Text("${name(from)} \u2192 ${name(to)}", color = SadoColors.Text, fontSize = 13.sp) }
             log.kgNext.forEach { (id, k) -> Text("${name(id)}: tambah berat ke ${if (k % 1f == 0f) k.toInt() else k} kg", color = SadoColors.Text, fontSize = 13.sp) }
+        }
+    }
+}
+
+/** A move's muscles: main ones red and helpers light, on the front and back, with their names beside. */
+@Composable
+internal fun MoveMuscles(id: String) {
+    val m = Catalog.moves.firstOrNull { it.id == id } ?: return
+    val helpers = m.secondary - m.muscles.toSet()
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface2).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        MuscleMap(m.muscles, m.secondary, back = false, modifier = Modifier.size(width = 48.dp, height = 102.dp))
+        MuscleMap(m.muscles, m.secondary, back = true, modifier = Modifier.size(width = 48.dp, height = 102.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            MuscleLine(Heat.heavy, "Otot utama", m.muscles)
+            if (helpers.isNotEmpty()) MuscleLine(Heat.light, "Membantu", helpers)
+        }
+    }
+}
+
+@Composable
+private fun MuscleLine(color: androidx.compose.ui.graphics.Color, title: String, muscles: List<String>) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.padding(top = 4.dp).size(10.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
+        Column {
+            Text(title, color = SadoColors.TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(muscles.joinToString(", ") { Catalog.muscleNames[it] ?: it }, color = SadoColors.Text, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
