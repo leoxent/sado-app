@@ -289,6 +289,9 @@ fun HealthScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Title("Jam & kesihatan", "Garmin, Samsung, Fitbit melalui Health Connect", onBack = onBack)
 
+        Label("Jam aku")
+        MyWatchCard()
+
         Label("Health Connect")
         when {
             sdk == HealthConnectClient.SDK_UNAVAILABLE -> Card {
@@ -370,17 +373,22 @@ fun HealthScreen(onBack: () -> Unit) {
             }
         }
 
-        Label("HR masa workout")
-        Segmented(listOf("Strength mode", "Broadcast"), s.settings.hrMode.coerceIn(0, 1)) { i ->
-            Store.update { it.copy(settings = it.settings.copy(hrMode = i)) }
-            if (i == 0) HeartRate.disconnect()
+        val myWatch = my.sado.app.data.Watch.brand(s.settings.watch)
+        if (s.settings.watch != my.sado.app.data.Watch.NONE) {
+            Label("HR masa workout")
+            val broadcast = myWatch == null || myWatch.canBroadcast || myWatch.id == "other"
+            if (broadcast) Segmented(listOf("Mod aktiviti", "Broadcast"), s.settings.hrMode.coerceIn(0, 1)) { i ->
+                Store.update { it.copy(settings = it.settings.copy(hrMode = i)) }
+                if (i == 0) HeartRate.disconnect()
+            }
+            val name = myWatch?.label ?: "jam"
+            Text(
+                if (!broadcast || s.settings.hrMode == 0) "Mula aktiviti senaman kat $name masa workout. Lepas jam sync, Sado isi analisis HR sendiri. Tak makan bateri lebih, takde pairing. Perlukan Health Connect di atas."
+                else "On Broadcast Heart Rate kat jam (paling senang: dalam setting aktiviti Strength). HR live masa sesi dan analisis terus lepas sesi. Makan bateri jam masa broadcast.",
+                color = SadoColors.TextMuted, fontSize = 13.sp,
+            )
+            if (broadcast && s.settings.hrMode == 1) HeartRateCard()
         }
-        Text(
-            if (s.settings.hrMode == 0) "Start Strength kat jam masa workout. Lepas Garmin sync, Sado isi analisis HR sendiri. Tak makan bateri lebih, takde pairing. Perlukan Health Connect di atas."
-            else "On Broadcast Heart Rate kat jam (paling senang: dalam setting aktiviti Strength). HR live masa sesi dan analisis terus lepas sesi. Makan bateri jam masa broadcast.",
-            color = SadoColors.TextMuted, fontSize = 13.sp,
-        )
-        if (s.settings.hrMode == 1) HeartRateCard()
         s.logs.lastOrNull()?.let { last ->
             Label("Sesi terakhir · ${last.title}")
             HrReportCard(last, waiting = s.settings.healthConnect)

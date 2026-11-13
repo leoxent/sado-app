@@ -139,6 +139,11 @@ data class Settings(
     val appLock: Boolean = false,
     val foodAi: Boolean = true,
     val healthConnect: Boolean = false,
+    val watch: String? = null, // Watch brand id, "none" for no watch, null = not known yet
+    val watchModel: String? = null,
+    val watchConfirmed: Boolean = false, // the user said the detected watch is right, or picked it
+    val remindWatchStart: Boolean = true, // before a workout: start the activity on the watch
+    val remindWatchStop: Boolean = true, // after: stop and save it
     val hrMode: Int = 0, // heart rate during a workout: 0 Strength mode on the watch (Health Connect after sync), 1 Broadcast live
     val hrDevice: String? = null, // MAC of the watch broadcasting heart rate over BLE
     val hrDeviceName: String? = null,

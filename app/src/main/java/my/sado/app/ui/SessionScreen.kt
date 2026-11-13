@@ -729,6 +729,13 @@ fun DoneScreen(onHome: () -> Unit) {
                 )
             }
         }
+        var stopShown by remember { mutableStateOf(true) }
+        my.sado.app.data.Watch.brand(s.settings.watch)?.let { b ->
+            if (stopShown && s.settings.remindWatchStop && !zero) WatchStopCard(
+                b, onDone = { stopShown = false },
+                onNever = { stopShown = false; Store.update { it.copy(settings = it.settings.copy(remindWatchStop = false)) } },
+            )
+        }
         SummaryCard(log, s.logs.dropLast(1))
         HrReportCard(log, waiting = s.settings.healthConnect)
         NewAchievements(fresh)

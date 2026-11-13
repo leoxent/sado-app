@@ -83,6 +83,14 @@ fun WorkoutPreviewScreen(source: String, onBack: () -> Unit, onExercise: (String
     val original = remember(source, state.sleep, state.boosts, state.extraSets, state.myTemplates) { sessionFor(source, quizGear = true).second }
     var pending by remember { mutableStateOf<List<String>?>(null) }
     var working by remember { mutableStateOf(false) }
+    var askWatch by remember { mutableStateOf(false) }
+    // the watch reminder: start the activity there first, so its heart rate covers this session
+    my.sado.app.data.Watch.brand(st.watch)?.let { b ->
+        if (askWatch) WatchStartDialog(
+            b, onGo = { askWatch = false; onStart() }, onSkip = { askWatch = false; onStart() },
+            onNever = { askWatch = false; Store.update { it.copy(settings = it.settings.copy(remindWatchStart = false)) }; onStart() },
+        )
+    }
     LaunchedEffect(pending) {
         val p = pending ?: return@LaunchedEffect
         working = true
@@ -223,7 +231,9 @@ fun WorkoutPreviewScreen(source: String, onBack: () -> Unit, onExercise: (String
             Card { SleepPicker() }
         }
         Box(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-            PrimaryButton("START WORKOUT", enabled = plan.isNotEmpty() && !working, onClick = onStart)
+            PrimaryButton("START WORKOUT", enabled = plan.isNotEmpty() && !working) {
+                if (st.remindWatchStart && my.sado.app.data.Watch.brand(st.watch) != null) askWatch = true else onStart()
+            }
         }
     }
 }

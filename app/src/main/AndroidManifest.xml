@@ -33,6 +33,15 @@
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- watch companion apps: tell which watch the user wears (Watch.kt) -->
+        <package android:name="com.garmin.android.apps.connectmobile" />
+        <package android:name="com.samsung.android.app.watchmanager" />
+        <package android:name="com.google.android.apps.wearables.maestro.companion" />
+        <package android:name="com.fitbit.FitbitMobile" />
+        <package android:name="com.huawei.health" />
+        <package android:name="com.huami.watch.hmwatchmanager" />
+        <package android:name="com.xiaomi.wearable" />
+        <package android:name="com.mi.health" />
     </queries>
 
     <application

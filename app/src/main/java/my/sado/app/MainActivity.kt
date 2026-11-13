@@ -1,5 +1,7 @@
 package my.sado.app
 
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -159,6 +161,7 @@ class MainActivity : FragmentActivity() {
         if (!unlocked) authenticate()
         // the watch picked once reconnects by itself whenever the app comes back
         if (Store.state.value.settings.hrMode == 1) HeartRate.reconnectSaved(this, Store.state.value.settings.hrDevice)
+        if (Store.state.value.settings.watch == null) lifecycleScope.launch { runCatching { my.sado.app.data.WatchDetect.autoDetect(this@MainActivity) } }
     }
 
     override fun onStop() {

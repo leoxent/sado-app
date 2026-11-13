@@ -120,6 +120,17 @@ class ScreensTest {
     }
     @Test fun history() = shot("history", ::historySetup) { my.sado.app.ui.HistoryScreen({}, {}) }
     @Test fun sessionLog() = shot("sessionlog", ::historySetup) { my.sado.app.ui.SessionLogScreen(Store.state.value.logs.lastIndex) {} }
+    private fun garmin() = Store.update { it.copy(settings = it.settings.copy(watch = "garmin", watchModel = "Forerunner 165", watchConfirmed = false)) }
+    @Test fun watchStart() = shot("watchstart", ::garmin) {
+        my.sado.app.ui.WatchStartCard(my.sado.app.data.Watch.brand("garmin")!!, {}, {}, {}, still = true)
+    }
+    @Test fun watchStartSamsung() = shot("watchstartsamsung") {
+        my.sado.app.ui.WatchStartCard(my.sado.app.data.Watch.brand("samsung")!!, {}, {}, {}, still = true)
+    }
+    @Test fun watchStop() = shot("watchstop", ::garmin) {
+        my.sado.app.ui.WatchStopCard(my.sado.app.data.Watch.brand("garmin")!!, {}, {}, still = true)
+    }
+    @Test fun myWatch() = shot("mywatch", ::garmin) { my.sado.app.ui.MyWatchCard(still = true) }
     @Test fun squatPic() = shot("squatpic") { my.sado.app.ui.ExerciseDetailScreen("squat") {} }
     @Test fun session() = shot("session") { my.sado.app.ui.SessionScreen("plan", {}, {}, {}) }
     @Test fun sessionLong() = shot("sessionlong", { my.sado.app.data.Store.update { s -> s.copy(plan = s.plan?.mapExercises { ex -> listOf(ex.first().copy(id = "kneeraise")) + ex.drop(1) }) } }) {
