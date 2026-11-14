@@ -26,6 +26,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.graphics.graphicsLayer
+import my.sado.app.data.MealTime
+import my.sado.app.data.MealWhen
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -119,11 +123,11 @@ private fun scaled(f: FoodItem, k: Float) = f.copy(
     protein = f.protein * k, carbs = f.carbs * k, fat = f.fat * k,
 )
 
-private fun addMeal(items: List<FoodItem>): Meal {
-    val now = LocalTime.now()
-    val m = Meal(LocalDate.now().toEpochDay(), now.hour * 60 + now.minute, items)
+private fun addMeal(items: List<FoodItem>, at: MealWhen = MealWhen()): Meal {
+    val (day, minute) = MealTime.resolve(at)
+    val m = Meal(day, minute, items)
     Store.update { it.copy(meals = it.meals + m) }
-    Feedback.success()
+    Feedback.add()
     return m
 }
 
@@ -141,7 +145,15 @@ private fun kcalText(lo: Int, hi: Int) = if (lo == hi) "$lo" else "$lo–$hi"
 fun NutritionScreen(onBack: () -> Unit, onAi: () -> Unit, onBarcode: () -> Unit) {
     val s = Store.state.collectAsState().value
     val today = LocalDate.now().toEpochDay()
-    val meals = s.meals.filter { it.epochDay == today }
+    // which day the screen shows: today, yesterday or the day before
+    var dayBack by remember { mutableStateOf(0) }
+    val dayName = MealTime.DAYS[dayBack]
+    val dayLower = dayName.lowercase()
+    val meals = s.meals.filter { it.epochDay == today - dayBack }
+    // where one-tap adds go; back to "now" every time the screen opens
+    var quickWhen by remember { mutableStateOf(MealWhen()) }
+    var pickQuick by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf<Meal?>(null) }
     val items = meals.flatMap { it.items }
     val protein = items.sumOf { it.protein.toDouble() }.roundToInt()
     val carbs = items.sumOf { it.carbs.toDouble() }.roundToInt()
@@ -155,7 +167,7 @@ fun NutritionScreen(onBack: () -> Unit, onAi: () -> Unit, onBarcode: () -> Unit)
     // the last add or delete, kept a few seconds so a mis-tap can be taken back
     var undo by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     LaunchedEffect(undo) { if (undo != null) { delay(4000); undo = null } }
-    fun added(name: String, m: Meal) { undo = "$name masuk log" to { Store.update { st -> st.copy(meals = st.meals - m) } } }
+    fun added(name: String, m: Meal) { undo = "$name masuk log${MealTime.toastSuffix(m.epochDay, m.minute)}" to { Store.update { st -> st.copy(meals = st.meals - m) } } }
     // swap one meal for its edited copy (null = gone); undo swaps it back
     fun swap(old: Meal, new: Meal?) = Store.update { st ->
         val i = st.meals.indexOf(old)
@@ -181,11 +193,26 @@ fun NutritionScreen(onBack: () -> Unit, onAi: () -> Unit, onBarcode: () -> Unit)
             ) { editing = null }
         }
     }
+    if (pickQuick) MealWhenDialog("Masuk ke bila?", "Makanan yang kau tekan lepas ni masuk ke masa ni. Keluar skrin, dia balik ke Sekarang.", quickWhen, "Guna masa ni",
+        onConfirm = { quickWhen = it; pickQuick = false }, onDismiss = { pickQuick = false })
+    moving?.let { m ->
+        MealWhenDialog("Tukar masa makan", "Pindah ke hari atau jam lain. Paling jauh kelmarin.", MealTime.of(m.epochDay, m.minute) ?: MealWhen(), "Pindah",
+            onConfirm = { w ->
+                val (d, min) = MealTime.resolve(w)
+                val nm = m.copy(epochDay = d, minute = min)
+                swap(m, nm); moving = null; Feedback.success()
+                undo = "Dipindah ke ${MealTime.DAYS[(today - d).toInt()].lowercase()} ${MealTime.clock(min)}" to { swap(nm, m) }
+            }, onDismiss = { moving = null })
+    }
     var n = 0
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Title("Makan hari ni", plan?.let { "${it.mode} · ${it.kcal} kcal · protein ${it.protein}g" } ?: "Target protein ${target}g · 1.6 g × 65 kg", onBack = onBack)
+            Title("Makan $dayLower", plan?.let { "${it.mode} · ${it.kcal} kcal · protein ${it.protein}g" } ?: "Target protein ${target}g · 1.6 g × 65 kg", onBack = onBack)
+
+            Row(Modifier.appear(n++), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MealTime.DAYS.forEachIndexed { i, d -> WhenChip(d, dayBack == i) { dayBack = i } }
+            }
 
             Card(Modifier.appear(n++), padding = 20) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -232,12 +259,26 @@ fun NutritionScreen(onBack: () -> Unit, onAi: () -> Unit, onBarcode: () -> Unit)
                 LogWay("Scan barcode", "Makanan berbungkus", SadoIcons.Camera, SadoColors.Sky, Modifier.weight(1f), onBarcode)
             }
 
+            // where the one-tap foods below go: now unless picked otherwise
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (quickWhen.isNow) SadoColors.Surface else SadoColors.Accent.copy(alpha = 0.14f))
+                    .border(1.dp, if (quickWhen.isNow) SadoColors.Outline else SadoColors.Accent, RoundedCornerShape(18.dp))
+                    .clickable(role = Role.Button) { Feedback.tap(); pickQuick = true }.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Tekan makanan masuk ke", color = SadoColors.TextMuted, fontSize = 12.sp)
+                    Text(MealTime.label(quickWhen), color = if (quickWhen.isNow) SadoColors.Text else SadoColors.Accent, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Tukar masa", tint = SadoColors.TextMuted)
+            }
+
             if (s.myFoods.isNotEmpty()) {
                 Label("Makanan aku · tekan untuk tambah")
                 s.myFoods.forEach { mf ->
                     val p = mf.items.sumOf { it.protein.toDouble() }.roundToInt()
                     Row(
-                        Modifier.fillMaxWidth().pressable { added(mf.name, addMeal(mf.items)) }.clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface)
+                        Modifier.fillMaxWidth().pressable { added(mf.name, addMeal(mf.items, quickWhen)) }.clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface)
                             .border(1.dp, SadoColors.Outline, RoundedCornerShape(20.dp)).padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -252,12 +293,25 @@ fun NutritionScreen(onBack: () -> Unit, onAi: () -> Unit, onBarcode: () -> Unit)
                 }
             }
 
-            Label("Tambah cepat · anggaran")
+            // folds away and stays folded (a setting) until opened again
+            val quickOpen = s.settings.quickFoodsOpen
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(role = Role.Button, onClickLabel = if (quickOpen) "Tutup" else "Buka") {
+                    Feedback.fold(!quickOpen)
+                    Store.update { it.copy(settings = it.settings.copy(quickFoodsOpen = !quickOpen)) }
+                }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) { Label(if (quickOpen) "Tambah cepat · anggaran" else "Tambah cepat · ${presets.size} makanan") }
+                val turn by animateFloatAsState(if (quickOpen) 180f else 0f, label = "fold")
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = SadoColors.TextMuted, modifier = Modifier.graphicsLayer { rotationZ = turn })
+            }
+            AnimatedVisibility(quickOpen) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             presets.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { f ->
                         Column(
-                            Modifier.weight(1f).pressable { added(f.name, addMeal(listOf(f))) }.clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface)
+                            Modifier.weight(1f).pressable { added(f.name, addMeal(listOf(f), quickWhen)) }.clip(RoundedCornerShape(20.dp)).background(SadoColors.Surface)
                                 .border(1.dp, SadoColors.Outline, RoundedCornerShape(20.dp)).padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -279,11 +333,17 @@ fun NutritionScreen(onBack: () -> Unit, onAi: () -> Unit, onBarcode: () -> Unit)
                 }
             }
 
-            Label("Log hari ni")
-            if (meals.isNotEmpty()) Text("Tekan makanan untuk edit nama, kuantiti, kalori atau gambar.", color = SadoColors.TextMuted, fontSize = 12.sp)
+            } }
+
+            Label("Log $dayLower")
+            if (meals.isNotEmpty()) Text("Tekan makanan untuk edit. Tekan jam untuk pindah ke masa lain.", color = SadoColors.TextMuted, fontSize = 12.sp)
             if (meals.isEmpty()) Card {
-                Text("Belum ada apa-apa lagi", color = SadoColors.Text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Tekan makanan kat atas, atau tulis je apa kau makan. Satu tekan, terus masuk.", color = SadoColors.TextMuted, fontSize = 13.sp)
+                Text(if (dayBack == 0) "Belum ada apa-apa lagi" else "Takde log $dayLower", color = SadoColors.Text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    if (dayBack == 0) "Tekan makanan kat atas, atau tulis je apa kau makan. Satu tekan, terus masuk."
+                    else "Terlupa log? Tukar masa \"masuk ke\" kat atas ke $dayLower, lepas tu tekan makanan.",
+                    color = SadoColors.TextMuted, fontSize = 13.sp,
+                )
             }
             meals.sortedBy { it.minute }.groupBy { period(it.minute) }.forEach { (name, group) ->
                 Card {
@@ -294,7 +354,10 @@ fun NutritionScreen(onBack: () -> Unit, onAi: () -> Unit, onBarcode: () -> Unit)
                     }
                     group.forEach { m ->
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("%d:%02d".format(m.minute / 60, m.minute % 60), color = SadoColors.TextMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(40.dp))
+                            Text(
+                                MealTime.clock(m.minute), color = SadoColors.Sky, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.width(52.dp).clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button, onClickLabel = "Tukar masa") { Feedback.tap(); moving = m }.padding(vertical = 8.dp, horizontal = 4.dp),
+                            )
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 m.items.forEachIndexed { i, f ->
                                     // tap a line to change it; the bin takes out just this one item
@@ -431,6 +494,7 @@ private fun AddDot() = Box(Modifier.size(28.dp).clip(CircleShape).background(Sad
 private fun ConfirmItems(items: MutableList<Pair<FoodItem, Float>>, defaultName: String, onSave: () -> Unit) {
     var save by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf(defaultName) }
+    var at by remember { mutableStateOf(MealWhen()) }
     var editing by remember { mutableStateOf<Int?>(null) }
     editing?.let { i ->
         items.getOrNull(i)?.let { (f, k) ->
@@ -471,8 +535,10 @@ private fun ConfirmItems(items: MutableList<Pair<FoodItem, Float>>, defaultName:
         Text("Simpan makanan ni? Lepas ni pilih je.", color = SadoColors.Text, fontSize = 13.sp)
     }
     if (save) OutlinedTextField(name, { name = it.take(40) }, label = { Text("Nama dalam Makanan aku") }, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
-    PrimaryButton(if (save) "Simpan & ingat" else "Simpan ke log", enabled = items.isNotEmpty()) {
-        addMeal(all)
+    Label("Bila makan?")
+    MealWhenPicker(at) { at = it }
+    PrimaryButton(if (save) "Simpan & ingat" else if (at.isNow) "Simpan ke log" else "Simpan · ${MealTime.label(at)}", enabled = items.isNotEmpty()) {
+        addMeal(all, at)
         if (save && name.isNotBlank()) Store.update { it.copy(myFoods = it.myFoods + MyFood(name.trim(), all)) }
         onSave()
     }
@@ -534,10 +600,11 @@ fun AiFoodScreen(onBack: () -> Unit) {
             Text(if (photo != null) "Contoh: nasi 2 senduk, sambal sotong 1 sudu. Teks kau menang kalau lain dengan gambar." else "Tulis macam cakap biasa. BM, English, campur pun boleh.", color = SadoColors.TextMuted, fontSize = 12.sp)
             MeasureGuide()
             if (error != null) Text(error!!, color = SadoColors.Danger, fontSize = 13.sp)
-            if (loading) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            if (loading) Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(my.sado.app.R.drawable.face_think), null, Modifier.height(140.dp))
+                ThinkingLine()
             }
-            PrimaryButton(if (loading) "Haiku tengah kira..." else "Kira dengan AI", enabled = (text.isNotBlank() || photo != null) && !loading) {
+            PrimaryButton(if (loading) "Tengah kira..." else "Kira dengan AI", enabled = (text.isNotBlank() || photo != null) && !loading) {
                 loading = true; error = null
                 scope.launch {
                     runCatching { withContext(Dispatchers.IO) { FoodAi.parse(key!!, text, photo?.jpeg) } }
@@ -555,6 +622,38 @@ fun AiFoodScreen(onBack: () -> Unit) {
 }
 
 private val json = Json { ignoreUnknownKeys = true }
+
+// what the AI is "doing" while it counts: a new line every couple of seconds, never the same one twice in a row
+internal val THINKING = listOf(
+    "Membaca nutrisi sajian kau…",
+    "Judging kalori intake kau…",
+    "Kira berapa senduk nasi sebenarnya…",
+    "Sambal tu pun dikira, jangan risau…",
+    "Mengintai minyak yang menyorok…",
+    "Menimbang protein dengan mata kasar…",
+    "Teh tarik kurang manis? Kita tengok…",
+    "Bertanya nenek pasal santan…",
+    "Mengira butir nasi satu per satu…",
+    "Haiku pun dah mula lapar…",
+    "Memastikan ayam tu bukan goreng tepung…",
+    "Scan lemak tersembunyi…",
+    "Rundingan dengan kuah kari…",
+    "Mengesahkan 'sikit je' tu betul-betul sikit…",
+)
+
+@Composable
+private fun ThinkingLine() {
+    var i by remember { mutableStateOf(kotlin.random.Random.nextInt(THINKING.size)) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1800)
+            i = (i + 1 + kotlin.random.Random.nextInt(THINKING.size - 1)) % THINKING.size
+        }
+    }
+    androidx.compose.animation.AnimatedContent(i, label = "thinking") { k ->
+        Text(THINKING[k], color = SadoColors.TextMuted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    }
+}
 
 // Open Food Facts lookup; returns null when the product isn't in the database
 private fun lookup(code: String): FoodItem? {

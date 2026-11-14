@@ -504,6 +504,8 @@ object Feedback {
             mapOf(
                 "rep" to my.sado.app.R.raw.sfx_rep, "tick" to my.sado.app.R.raw.sfx_tick, "success" to my.sado.app.R.raw.sfx_success,
                 "achievement" to my.sado.app.R.raw.sfx_achievement, "levelup" to my.sado.app.R.raw.sfx_levelup,
+                "click" to my.sado.app.R.raw.sfx_click, "add" to my.sado.app.R.raw.sfx_add,
+                "open" to my.sado.app.R.raw.sfx_open, "close" to my.sado.app.R.raw.sfx_close,
                 "pet_harimau" to my.sado.app.R.raw.sfx_pet_harimau, "pet_harimau_legenda" to my.sado.app.R.raw.sfx_pet_harimau_legenda,
                 "pet_serigala" to my.sado.app.R.raw.sfx_pet_serigala, "pet_serigala_legenda" to my.sado.app.R.raw.sfx_pet_serigala_legenda,
                 "pet_helang" to my.sado.app.R.raw.sfx_pet_helang, "pet_beruang" to my.sado.app.R.raw.sfx_pet_beruang,
@@ -535,7 +537,10 @@ object Feedback {
         runCatching { pool?.play(id, volume, volume, 1, 0, 1f) }
     }
 
-    fun tap() = buzz(12)
+    // every button and tappable card: a quiet click under the buzz
+    fun tap() { buzz(12); play("click", 0.35f) }
+    fun add() { buzz(40); play("add", 0.8f) }
+    fun fold(open: Boolean) { buzz(15); play(if (open) "open" else "close", 0.6f) }
     fun rep() { buzz(25); play("rep", 0.7f) }
     fun success() { buzz(60); play("success") }
     fun countdown() = play("tick", 0.7f)

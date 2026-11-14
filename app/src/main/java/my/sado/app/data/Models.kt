@@ -139,6 +139,7 @@ data class Settings(
     val reminderMinute: Int = 0,
     val appLock: Boolean = false,
     val foodAi: Boolean = true,
+    val quickFoodsOpen: Boolean = true, // the Tambah cepat list on the food screen: folded stays folded until opened
     val healthConnect: Boolean = false,
     val watch: String? = null, // Watch brand id, "none" for no watch, null = not known yet
     val watchModel: String? = null,
