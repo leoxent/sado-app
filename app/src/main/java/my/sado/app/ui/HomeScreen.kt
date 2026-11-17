@@ -73,7 +73,11 @@ fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Uni
     val today = LocalDate.now()
     val doneToday = s.logs.any { it.epochDay == today.toEpochDay() }
     // the character's mood: cheering after a workout, sleepy on rest days or after 2+ days off, else calling you in
-    val restDay = s.plan?.week?.getOrNull(today.dayOfWeek.value - 1) == "Rest"
+    val restDay = tag == "Rest"
+    // this week as it plays out: missed days slide their session forward (WeekShift)
+    val shifted = my.sado.app.data.WeekShift.week(s, today.toEpochDay(), today.toEpochDay())
+    val todayShift = shifted.firstOrNull { it.epochDay == today.toEpochDay() }
+    val todaySession = my.sado.app.data.WeekShift.sessionOn(s, today, today) ?: s.plan?.sessionOn()
     val idleDays = Progress.idleDays(s, today) ?: 0
     val idle = idleDays >= 2
     val tired = Progress.isTired(s, today)
@@ -259,52 +263,73 @@ fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Uni
                 days.forEachIndexed { i, d ->
                     val date = monday.plusDays(i.toLong())
                     val logged = s.logs.any { it.epochDay == date.toEpochDay() }
-                    val rest = s.plan.week[i] == "Rest"
+                    val day = shifted.getOrNull(i)
+                    val rest = day?.tag == "Rest"
                     val isToday = date == today
+                    // what the day holds: its session, Rest, ↪ when it slid on, ✕ when missed
+                    val (what, whatColor) = when {
+                        day == null -> "" to SadoColors.TextMuted
+                        logged -> shortTag(day.tag).ifEmpty { "✓" } to SadoColors.OnAccent
+                        day.status == my.sado.app.data.WeekShift.Status.MOVED -> "↪" to SadoColors.Streak
+                        day.status == my.sado.app.data.WeekShift.Status.MISSED -> "✕" to SadoColors.TextMuted
+                        rest -> "Rest" to SadoColors.TextMuted
+                        day.shiftedIn -> shortTag(day.tag) to SadoColors.Streak
+                        else -> shortTag(day.tag) to SadoColors.Accent
+                    }
                     Column(
-                        Modifier.weight(1f).aspectRatio(0.72f).clip(RoundedCornerShape(16.dp))
+                        Modifier.weight(1f).aspectRatio(0.6f).clip(RoundedCornerShape(16.dp))
                             .background(if (logged) SadoColors.Accent else SadoColors.Surface)
-                            .border(2.dp, if (isToday && !logged) SadoColors.Accent else SadoColors.Outline, RoundedCornerShape(16.dp)),
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                            .border(2.dp, if (isToday && !logged) SadoColors.Accent else if (day?.shiftedIn == true && !logged) SadoColors.Streak.copy(alpha = 0.6f) else SadoColors.Outline, RoundedCornerShape(16.dp)),
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
                     ) {
                         Text(d, color = if (logged) SadoColors.OnAccent else SadoColors.TextMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Text("${date.dayOfMonth}", color = if (logged) SadoColors.OnAccent else if (rest) SadoColors.TextMuted else SadoColors.Text, fontSize = 18.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+                        Text(what, color = whatColor, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, letterSpacing = 0.sp)
                     }
                 }
             }
 
             // today's session
-            Column(
-                Modifier.fillMaxWidth().appear(n++).pressable(onClick = onPlanView).clip(RoundedCornerShape(28.dp))
-                    .background(SadoColors.Surface).border(1.dp, SadoColors.Outline, RoundedCornerShape(28.dp)).padding(20.dp),
+            // the session's scene behind the card (Rest day shows the rest scene); no scene keeps the plain card
+            val homeArt = CardArt.of(if (tag == "Rest") "Rest" else (todaySession ?: s.plan.sessionOn()).tag)
+            val onArt = homeArt != null
+            val cardTop = Modifier.fillMaxWidth().appear(n++).pressable(onClick = onPlanView).clip(RoundedCornerShape(28.dp))
+                .border(1.dp, SadoColors.Outline, RoundedCornerShape(28.dp))
+            val cardBody: @Composable () -> Unit = { Column(
+                Modifier.fillMaxWidth().padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Label(if (tag == "Rest") "Rest day" else "Sesi hari ni")
-                        Text(s.plan.sessionOn().label, color = SadoColors.Text, fontSize = 26.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+                        val label = if (tag == "Rest") "Rest day" else if (todayShift?.shiftedIn == true) "Sesi hari ni · ↪ tertunda" else "Sesi hari ni"
+                        if (onArt) Text(label.uppercase(), color = CardArt.Muted, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp)
+                        else Label(label)
+                        Text((todaySession ?: s.plan.sessionOn()).label, color = if (onArt) CardArt.Text else SadoColors.Text, fontSize = 26.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
                     }
+                    val ubah = if (onArt) CardArt.Accent else SadoColors.Accent
                     Text(
-                        "Ubah plan", color = SadoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.pressable(onClick = onPlanner).clip(RoundedCornerShape(14.dp)).background(SadoColors.Accent.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 10.dp),
+                        "Ubah plan", color = ubah, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.pressable(onClick = onPlanner).clip(RoundedCornerShape(14.dp)).background(if (onArt) Color.Black.copy(alpha = 0.45f) else ubah.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
                 // move chips
-                s.plan.sessionOn().exercises.chunked(2).forEach { pair ->
+                (todaySession ?: s.plan.sessionOn()).exercises.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         pair.forEach { e ->
                             Row(
-                                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(SadoColors.Surface2).padding(horizontal = 12.dp, vertical = 10.dp),
+                                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (onArt) Color.Black.copy(alpha = 0.5f) else SadoColors.Surface2).padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text("${e.sets}×", color = SadoColors.Accent, fontSize = 14.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
-                                Text(Catalog.get(e.id).name, color = SadoColors.Text, fontSize = 13.sp, maxLines = 1)
+                                Text("${e.sets}×", color = if (onArt) CardArt.Accent else SadoColors.Accent, fontSize = 14.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+                                Text(Catalog.get(e.id).name, color = if (onArt) CardArt.Text else SadoColors.Text, fontSize = 13.sp, maxLines = 1)
                             }
                         }
                         if (pair.size == 1) Box(Modifier.weight(1f))
                     }
                 }
-            }
+            } }
+            if (homeArt != null) ArtCard(homeArt, cardTop.background(Color.Black)) { cardBody() }
+            else Box(cardTop.background(SadoColors.Surface)) { cardBody() }
             if (s.answers?.pull == -1) Callout("Nak belakang lebar?", "Pull-up bar pintu (RM40–80) paling berbaloi untuk V-shape. Untuk kaki, isi beg galas dengan buku sebagai beban.", SadoColors.Violet, Modifier.appear(n++))
             // a rest day: training anyway is a Sesi tambahan, and the user picks which plan session
             var pickExtra by remember { mutableStateOf(false) }
@@ -371,4 +396,10 @@ fun Callout(title: String, body: String, color: Color, modifier: Modifier = Modi
         }
         if (onClick != null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = color, modifier = Modifier.align(Alignment.CenterVertically).padding(end = 12.dp))
     }
+}
+
+// a session's tag short enough for the week strip
+internal fun shortTag(tag: String) = when (tag) {
+    "Full body" -> "Full"; "Legs+Push" -> "Legs+"; "Legs+Core" -> "Legs+"; "Circuit" -> "Circuit"; "Rest" -> "Rest"
+    else -> tag.substringBefore('+').take(6)
 }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -61,23 +62,26 @@ fun WorkoutListScreen(onStart: (String) -> Unit, onLibrary: () -> Unit, onEditTe
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Title("Workout", "Plan ko, template aku, atau template siap")
         if (s.plan != null) {
-            Column(
-                Modifier.fillMaxWidth().appear(0).pressable { onStart("plan") }.clip(RoundedCornerShape(28.dp)).background(SadoColors.Accent)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text("SESI PLAN KAU", color = SadoColors.OnAccent.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp)
-                Text(s.plan.sessionOn().label.uppercase(), color = SadoColors.OnAccent, fontSize = 30.sp, lineHeight = 32.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+            val planSession = my.sado.app.data.WeekShift.sessionOn(s) ?: s.plan.sessionOn()
+            // the session's scene behind the card; light text on it, the lime card when there's no scene
+            val art = CardArt.of(planSession.tag)
+            val fg = if (art != null) CardArt.Text else SadoColors.OnAccent
+            val top = Modifier.fillMaxWidth().appear(0).pressable { onStart("plan") }.clip(RoundedCornerShape(28.dp))
+            val body: @Composable () -> Unit = { Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("SESI PLAN KAU", color = if (art != null) CardArt.Accent else fg.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp)
+                Text(planSession.label.uppercase(), color = fg, fontSize = 30.sp, lineHeight = 32.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${s.plan.sessionOn().exercises.size} move · hari ni: " + (if (tag == "Rest") "rest day (boleh buat jugak)" else tag ?: "-"),
-                        color = SadoColors.OnAccent.copy(alpha = 0.8f), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
+                        "${planSession.exercises.size} move · hari ni: " + (if (tag == "Rest") "rest day (boleh buat jugak)" else tag ?: "-"),
+                        color = fg.copy(alpha = 0.8f), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
                     )
-                    Box(Modifier.size(44.dp).clip(CircleShape).background(SadoColors.OnAccent), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = "Start", tint = SadoColors.Accent)
+                    Box(Modifier.size(44.dp).clip(CircleShape).background(if (art != null) CardArt.Accent else SadoColors.OnAccent), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = "Start", tint = if (art != null) CardArt.OnAccent else SadoColors.Accent)
                     }
                 }
-            }
+            } }
+            if (art != null) ArtCard(art, top.background(androidx.compose.ui.graphics.Color.Black).heightIn(min = 170.dp)) { Box(Modifier.align(Alignment.BottomStart)) { body() } }
+            else Box(top.background(SadoColors.Accent)) { body() }
         }
         Box(Modifier.padding(top = 8.dp)) { Label("Template aku · ${s.myTemplates.size}") }
         s.myTemplates.forEach { t ->

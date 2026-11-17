@@ -38,7 +38,7 @@ object SessionReview {
      * [earlier] are the sessions before [log], oldest first. [hr] is the heart-rate analysis when the watch sent
      * readings. [plan] gives tomorrow's session.
      */
-    fun sentences(log: WorkoutLog, earlier: List<WorkoutLog>, plan: Plan?, hr: HrAnalysis.Report? = null): List<String> {
+    fun sentences(log: WorkoutLog, earlier: List<WorkoutLog>, plan: Plan?, hr: HrAnalysis.Report? = null, tomorrowTag: String? = null): List<String> {
         val done = log.exercises.filter { !it.skipped && Integrity.real(it).isNotEmpty() }
         if (done.isEmpty()) return listOf("Hari ni takde set yang dikira. Esok cuba satu move pun jadi, yang penting muncul.")
         val out = mutableListOf<String>()
@@ -111,7 +111,7 @@ object SessionReview {
         // tomorrow
         if (plan != null && plan.week.size == 7) {
             val day = LocalDate.ofEpochDay(log.epochDay + 1)
-            val tag = plan.week[day.dayOfWeek.value - 1]
+            val tag = tomorrowTag ?: plan.week[day.dayOfWeek.value - 1]
             val worked = top.map { it.key }.toSet()
             out += if (tag == "Rest") "Esok rest day. Tidur cukup dan makan protein, otot membesar masa rehat."
             else {
@@ -132,11 +132,11 @@ object SessionReview {
 object ExtraSession {
     data class Option(val tag: String, val label: String, val moves: Int, val notes: List<String>, val best: Boolean)
 
-    fun options(plan: Plan, logs: List<WorkoutLog>, today: LocalDate): List<Option> {
+    fun options(plan: Plan, logs: List<WorkoutLog>, today: LocalDate, tomorrowTag: String? = null): List<Option> {
         val yesterday = logs.filter { it.epochDay == today.toEpochDay() - 1 }
             .flatMap { l -> l.exercises.filter { !it.skipped && Integrity.real(it).isNotEmpty() } }
             .flatMap { e -> Catalog.moves.firstOrNull { it.id == e.id }?.muscles.orEmpty() }.toSet()
-        val tomorrow = plan.week.getOrNull(today.plusDays(1).dayOfWeek.value - 1)
+        val tomorrow = tomorrowTag ?: plan.week.getOrNull(today.plusDays(1).dayOfWeek.value - 1)
         val raw = plan.allSessions.map { s ->
             val muscles = s.exercises.flatMap { e -> Catalog.moves.firstOrNull { it.id == e.id }?.muscles.orEmpty() }.toSet()
             val tired = (muscles intersect yesterday).map { Catalog.muscleNames[it]?.lowercase() ?: it }

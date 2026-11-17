@@ -251,7 +251,7 @@ fun CalendarScreen(onTest: () -> Unit, onSport: () -> Unit, onAchievements: () -
                 else if (logs.isNotEmpty() || sp.isNotEmpty()) Tag("+${logs.sumOf { it.xp } + sp.sumOf { it.xp }} XP")
             }
             if (logs.isEmpty() && sp.isEmpty()) {
-                val rest = week?.get(picked.dayOfWeek.value - 1) == "Rest"
+                val rest = week != null && my.sado.app.data.WeekShift.tagOn(s, picked) == "Rest"
                 Text(
                     when { rest -> "Rest day dalam plan. Otot membesar masa rehat."; picked == today -> "Belum ada aktiviti hari ni."; else -> "Tiada aktiviti hari ni." },
                     color = SadoColors.TextMuted, fontSize = 14.sp,

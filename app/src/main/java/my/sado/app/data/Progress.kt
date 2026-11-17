@@ -276,8 +276,8 @@ object Progress {
         return StreakInfo(n, thisWeek)
     }
 
-    fun todayTag(state: AppState, today: LocalDate = LocalDate.now()): String? =
-        state.plan?.week?.get(today.dayOfWeek.value - 1)
+    // today's session after any missed days slid forward (WeekShift)
+    fun todayTag(state: AppState, today: LocalDate = LocalDate.now()): String? = WeekShift.tagOn(state, today, today)
 
     // every 5th week of a plan is a lighter week: one set fewer per move
     fun isDeloadWeek(s: AppState, today: LocalDate = LocalDate.now()): Boolean {

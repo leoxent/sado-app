@@ -35,10 +35,12 @@ import java.time.LocalDate
 /** "Ulasan sesi": the session told in a few sentences, above the per-move numbers. */
 @Composable
 fun ReviewCard(log: WorkoutLog, earlier: List<WorkoutLog>, plan: Plan?) {
-    val age = Store.state.collectAsState().value.profile?.age ?: 25
+    val st = Store.state.collectAsState().value
+    val age = st.profile?.age ?: 25
     val lines = remember(log, earlier.size, plan) {
         val hr = runCatching { HrAnalysis.analyze(HrStore.points(log), log.exercises, log.restingHr, age) }.getOrNull()
-        SessionReview.sentences(log, earlier, plan, hr)
+        val tomorrow = my.sado.app.data.WeekShift.tagOn(st, LocalDate.ofEpochDay(log.epochDay + 1))
+        SessionReview.sentences(log, earlier, plan, hr, tomorrow)
     }
     ReviewLines(lines)
 }
@@ -65,7 +67,7 @@ fun ExtraSessionDialog(s: AppState, onPick: (String) -> Unit, onDismiss: () -> U
 @Composable
 internal fun ExtraSessionPicker(s: AppState, onPick: (String) -> Unit, today: LocalDate = LocalDate.now()) {
     val plan = s.plan ?: return
-    val options = remember(plan, s.logs.size, today) { ExtraSession.options(plan, s.logs, today) }
+    val options = remember(plan, s.logs.size, today) { ExtraSession.options(plan, s.logs, today, my.sado.app.data.WeekShift.tagOn(s, today.plusDays(1), today)) }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(SadoColors.Surface)
             .border(1.dp, SadoColors.Outline, RoundedCornerShape(28.dp)).padding(22.dp),

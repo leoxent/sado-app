@@ -249,7 +249,7 @@ fun PlanResultScreen(onExercise: (String) -> Unit, onUse: () -> Unit, onRedo: ()
     }
     val sessions = plan.allSessions.map { it to shown(it.exercises) }
     val week = weekSets(plan, shown)
-    val today = plan.sessionOn()
+    val today = my.sado.app.data.WeekShift.sessionOn(s) ?: plan.sessionOn()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Plan kau", color = SadoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)

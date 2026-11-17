@@ -587,6 +587,23 @@ class ScreensTest {
     @Test fun health() = shot("health") { my.sado.app.ui.HealthScreen {} }
     @Test fun test4w() = shot("test4w") { my.sado.app.ui.FitnessTestScreen({}, {}) }
     @Test fun workouts() = shot("workouts") { WorkoutListScreen(onStart = {}, onLibrary = {}) }
+    // a plan in today's tags, so the session cards show their scene; [todayTag] lands on today
+    private fun artPlan(todayTag: String) = {
+        Store.update { s ->
+            val p = s.plan!!
+            val i = LocalDate.now().dayOfWeek.value - 1
+            val week = MutableList(7) { if (it % 2 == 0) "Pull" else "Rest" }.also { it[i] = todayTag; it[(i + 1) % 7] = "Legs+Push" }
+            val tags = week.distinct().filter { it != "Rest" }
+            s.copy(plan = p.copy(week = week, sessions = tags.map { my.sado.app.data.PlanSession(it, my.sado.app.data.PlanBuilder.tagLabels[it] ?: it, p.exercises) }))
+        }
+    }
+    @Config(sdk = [34], qualifiers = "w411dp-h2000dp-xxhdpi")
+    @Test fun homeArt() = shot("homeart", artPlan("Pull")) { HomeScreen({}, {}, {}, {}, {}, {}, {}) }
+    @Config(sdk = [34], qualifiers = "w411dp-h2000dp-xxhdpi")
+    @Test fun homeArtRest() = shot("homeartrest", artPlan("Rest")) { HomeScreen({}, {}, {}, {}, {}, {}, {}) }
+    @Config(sdk = [34], qualifiers = "w411dp-h2000dp-xxhdpi")
+    @Test fun homeArtLight() = shot("homeartlight", { artPlan("HIIT")(); light() }) { HomeScreen({}, {}, {}, {}, {}, {}, {}) }
+    @Test fun workoutsArt() = shot("workoutsart", artPlan("Legs+Core")) { WorkoutListScreen(onStart = {}, onLibrary = {}) }
     @Test fun phrases() { java.io.File("build/screens/phrases.txt").writeText(my.sado.app.Coach.commonPhrases().joinToString("\n")) }
     @Test fun dbPlan() {
         val out = StringBuilder()

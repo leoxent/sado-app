@@ -101,7 +101,7 @@ fun sessionFor(source: String, quizGear: Boolean = false): Pair<String, List<Pla
     } else {
         // "extra:<tag>": Sesi tambahan, a plan session the user picked on a rest day
         val extra = src.removePrefix("extra:").takeIf { src.startsWith("extra:") }
-        val today = s.plan?.let { p -> extra?.let { t -> p.allSessions.firstOrNull { it.tag == t } } ?: p.sessionOn() }
+        val today = s.plan?.let { p -> extra?.let { t -> p.allSessions.firstOrNull { it.tag == t } } ?: my.sado.app.data.WeekShift.sessionOn(s) ?: p.sessionOn() }
         val ex = today?.exercises.orEmpty()
         (today?.label?.let { if (extra != null) "Sesi tambahan · $it" else it } ?: "Sesi") to (s.answers?.let { PlanBuilder.refresh(ex, it, s.ladders) } ?: ex).map { Progress.boosted(it, s.boosts, s.extraSets) }
     }

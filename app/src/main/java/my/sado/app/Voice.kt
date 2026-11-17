@@ -787,7 +787,7 @@ object Reminders {
         return when {
             gap >= 3 -> "Aku rindu kau, $name..." to "Dah $gap hari. Satu set pun jadilah. Badan aku makin lembik ni."
             tag == "Rest" -> null
-            else -> "Jom, $name! Hari ni: $tag" to "${s.plan.sessionOn(today).exercises.size} move. Streak ${Progress.streak(s).days} hari, jangan putus."
+            else -> "Jom, $name! Hari ni: $tag" to "${(my.sado.app.data.WeekShift.sessionOn(s, today, today) ?: s.plan.sessionOn(today)).exercises.size} move. Streak ${Progress.streak(s).days} hari, jangan putus."
         }
     }
 
