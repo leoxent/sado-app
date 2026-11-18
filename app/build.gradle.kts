@@ -9,14 +9,14 @@ plugins {
 
 android {
     namespace = "my.sado.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "my.sado.app"
         minSdk = 28
-        targetSdk = 35
-        versionCode = 90
-        versionName = "0.48.1"
+        targetSdk = 36
+        versionCode = 91
+        versionName = "0.48.2"
         // ML Kit ships native libs per CPU; arm64 covers modern phones and keeps the APK sideload-friendly
         ndk { abiFilters += listOf("arm64-v8a") }
     }
