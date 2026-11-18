@@ -25,6 +25,15 @@ class FoodAiTest {
         assertTrue(body, body.contains("bermaksud SUDU MAKAN"))
     }
 
+    // a set dish is split into parts; a named side swaps its kind (telur mata for telur rebus) or adds a line
+    @Test fun setDishSplitsAndSwaps() {
+        val body = FoodAi.params("nasi lemak ayam goreng peha telur mata").toString()
+        assertTrue(body, body.contains("Pecahkan SETIAP set kepada komponennya"))
+        assertTrue(body, body.contains("\"Nasi lemak · telur mata\""))
+        assertTrue(body, body.contains("TIDAK disenaraikan lagi, jadi telur tak dikira dua kali"))
+        assertTrue(body, body.contains("nasi lemak (ayam peha, telur mata)"))
+    }
+
     @Test fun photoGoesAsImage() {
         val body = FoodAi.params("", byteArrayOf(1, 2, 3)).toString()
         assertTrue(body, body.contains("image/jpeg"))

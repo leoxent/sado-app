@@ -90,6 +90,35 @@ object FoodAi {
           tolak julat ke atas tanpa sebab, dan jangan kira lebih dari apa yang pengguna makan.
         - protein, carbs dan fat dalam gram untuk kuantiti yang sama.
 
+        HIDANGAN SET
+        - Hidangan set ialah nasi atau mi yang datang dengan isi tetap. Pecahkan SETIAP set kepada komponennya,
+          satu item setiap komponen, supaya pengguna boleh padam yang dia tak makan. Jangan beri satu item
+          "1 pinggan" yang dah termasuk lauk.
+        - Isi asas set biasa:
+          | Set               | Komponen asas                                                    |
+          | Nasi lemak        | nasi lemak, sambal, kacang + ikan bilis, timun, telur rebus separuh |
+          | Nasi kerabu       | nasi kerabu, ulam + kerisik, sambal tumis, ikan goreng, telur masin |
+          | Nasi dagang       | nasi dagang, gulai ikan tongkol, acar timun                      |
+          | Nasi ayam         | nasi ayam, ayam (goreng atau panggang), sup, timun + sos         |
+          | Mee rebus         | mi kuning + kuah, telur rebus separuh, tauhu, taugeh             |
+          | Roti canai        | roti canai, kuah dhal atau kari                                  |
+          Untuk set lain, guna isi yang biasa dijual di kedai Malaysia.
+        - Nama setiap komponen: "<Set> · <komponen>", contoh "Nasi lemak · nasi", "Nasi lemak · sambal",
+          "Nasi lemak · telur rebus". Item yang bukan sebahagian set guna nama biasa ("Teh tarik").
+        - Lauk yang pengguna sebut bersama set:
+          - GANTI komponen yang sejenis. Telur mata, telur dadar atau telur goreng ganti telur rebus (jadi
+            "Nasi lemak · telur mata"); ayam goreng peha dalam nasi ayam ganti ayam asas. Komponen yang diganti
+            TIDAK disenaraikan lagi, jadi telur tak dikira dua kali.
+          - TAMBAH kalau tiada komponen sejenis dalam set. "Nasi lemak ayam goreng" tambah
+            "Nasi lemak · ayam goreng" di sebelah komponen asas.
+          - Kalau pengguna tulis lauk dalam kurungan selepas nama set ("nasi lemak (ayam peha, telur mata)"),
+            itu ialah isi hidangan tersebut; ikut peraturan ganti dan tambah yang sama.
+        - "tak nak timun", "tanpa telur", "kosong" buang komponen tu. "sambal lebih" tambah berat komponen sambal,
+          bukan item baru. "Nasi lemak kosong" = nasi lemak, sambal, kacang + ikan bilis, timun sahaja.
+        - Kuantiti set ("separuh pinggan", "2 bungkus") digunakan pada setiap komponen asas; lauk tambahan ikut
+          kuantiti yang pengguna sebut untuk lauk tu.
+        - icon untuk komponen ikut rupa komponen itu sendiri (telur mata → telur_goreng, sambal → sambal, timun → ulam), bukan set.
+
         GAMBAR
         - Kadang-kadang pengguna hantar gambar makanan. Senaraikan setiap makanan dan minuman yang nampak,
           satu item setiap satu. Anggar berat dari saiz pinggan, mangkuk, sudu atau tangan dalam gambar.
