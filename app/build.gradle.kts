@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -19,6 +21,20 @@ android {
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
+    // Play Store upload key: kept outside the repo in C:\Sado-App\keys, used only when built with -Pplay
+    val uploadProps = rootProject.file("../keys/upload.properties")
+    val forPlay = project.hasProperty("play")
+    if (forPlay) {
+        require(uploadProps.exists()) { "Missing ${uploadProps.path}: make the upload key first" }
+        val p = Properties().apply { uploadProps.inputStream().use { load(it) } }
+        signingConfigs.create("upload") {
+            storeFile = rootProject.file("../keys/" + p.getProperty("storeFile"))
+            storePassword = p.getProperty("storePassword")
+            keyAlias = p.getProperty("keyAlias")
+            keyPassword = p.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
             // R8 drops the parts of the libraries (Claude SDK, ML Kit, Compose) the app never calls: a much smaller APK
@@ -26,7 +42,8 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // the debug key, so it installs over the debug builds already on the phone and keeps their data
-            signingConfig = signingConfigs.getByName("debug")
+            // (a Play build, -Pplay, signs with the upload key instead)
+            signingConfig = signingConfigs.getByName(if (forPlay) "upload" else "debug")
         }
     }
 
