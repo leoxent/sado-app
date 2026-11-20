@@ -68,6 +68,12 @@ object Progress {
         }
     }
 
+    /** The path is decided once, when the profile and the planner answers are both in, and then kept:
+     *  losing weight later must not swap a Gempal into the Kurus character halfway through. */
+    fun lockPath(s: AppState): AppState =
+        if (s.settings.bodyPath != null || s.profile == null || s.answers == null) s
+        else s.copy(settings = s.settings.copy(bodyPath = if (heavyPath(s)) "gempal" else "kurus"))
+
     fun stagesFor(s: AppState) = if (heavyPath(s)) heavyStages else stages
 
     // Low-impact: at BMI 30+ or waist-to-height 0.6+ every landing loads the knees and ankles with several times the
@@ -114,7 +120,8 @@ object Progress {
     fun firstDay(s: AppState): Long? = (s.logs.map { it.epochDay } + s.sports.map { it.epochDay }).minOrNull()
 
     fun weeksActive(s: AppState, today: LocalDate = LocalDate.now()): Int =
-        s.creditWeeks + (firstDay(s)?.let { (ChronoUnit.DAYS.between(LocalDate.ofEpochDay(it), today) / 7).toInt() } ?: 0)
+        // the first day counts as day 1, like the streak: a 7-day streak is one week
+        s.creditWeeks + (firstDay(s)?.let { ((ChronoUnit.DAYS.between(LocalDate.ofEpochDay(it), today) + 1) / 7).toInt() } ?: 0)
 
     // ── placement ("Buktikan!") ─────────────────────────────────────────────────────────────────
     // Offered once at setup. One unbroken set of push-ups, rest, then one plank. Passing puts the user at
@@ -422,7 +429,11 @@ object Progress {
             // what was carried today is the load from now on, whatever the user changed it to in the session
             if (weighted) log.sets.mapNotNull { it.kg }.maxOrNull()?.let { outK[log.id] = it }
             when {
-                d == null -> if (effort >= 3 && canClimb) outL[key!!] = LadderProgress(prog.rung + 1)
+                // a max-rep move only counts as Easy when the best set beat the record: an Easy at the same number is no progress
+                d == null -> {
+                    val beat = !isMaxRep(p.reps) || maxRecord(log.id, history).let { r -> r == null || sets.maxOf { it.reps } > r }
+                    if (effort >= 3 && canClimb && beat) outL[key!!] = LadderProgress(prog.rung + 1)
+                }
                 now >= stepRange(log.id, d).last && effort >= 3 && canClimb -> {
                     outL[key!!] = LadderProgress(prog.rung + 1)
                     outB.remove(rungs!![prog.rung + 1])
@@ -437,6 +448,14 @@ object Progress {
 
         return Climb(outL, outB, outK)
     }
+
+    /** A "maximum rep" set: as many as possible, no fixed number. */
+    fun isMaxRep(reps: String) = reps.startsWith("maximum")
+
+    /** The best real set of [id] in [history] (Sesi mini left out), or null when it was never done. */
+    fun maxRecord(id: String, history: List<WorkoutLog>): Int? =
+        history.filter { !it.mini }.flatMap { l -> l.exercises.filter { it.id == id && !it.skipped }.flatMap { Integrity.real(it) } }
+            .filter { !it.failed }.maxOfOrNull { it.reps }?.takeIf { it > 0 }
 
     const val NGAM_RUN = 3
     const val NGAM_COOLDOWN_DAYS = 28

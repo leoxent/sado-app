@@ -9,6 +9,7 @@ import my.sado.app.data.WeightLog
 import my.sado.app.data.WorkoutLog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,6 +37,17 @@ class HeavyPathTest {
         // waist beats BMI: a muscular 90 kg with a slim waist stays on Kurus → Berisi
         assertFalse(Progress.heavyPath(big.copy(profile = big.profile!!.copy(waistCm = 80f))))
         assertFalse(Progress.heavyPath(big.copy(settings = Settings(bodyPath = "kurus"))))
+    }
+
+    @Test fun pathIsLockedAtTheStart() {
+        // no planner answers yet: still open
+        val big = AppState(profile = Profile(heightCm = 170f, weightKg = 90f))
+        assertNull(Progress.lockPath(big).settings.bodyPath)
+        // once both are in, the path is kept even after the weight drops below BMI 27
+        val locked = Progress.lockPath(big.copy(answers = PlannerAnswers()))
+        assertEquals("gempal", locked.settings.bodyPath)
+        assertTrue(Progress.heavyPath(locked.copy(profile = locked.profile!!.copy(weightKg = 70f))))
+        assertEquals("kurus", Progress.lockPath(AppState(profile = Profile(heightCm = 170f, weightKg = 60f), answers = PlannerAnswers())).settings.bodyPath)
     }
 
     @Test fun slowerStartSameFit() {

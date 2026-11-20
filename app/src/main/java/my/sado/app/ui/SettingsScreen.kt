@@ -42,6 +42,20 @@ import my.sado.app.data.Settings
 import my.sado.app.data.Store
 import my.sado.app.data.Wger
 
+// the name Home greets; saved as it's typed, kept to NAME_MAX so the header stays one line
+@Composable
+private fun NameCard(name: String, onChange: (String) -> Unit) {
+    var text by remember(name) { mutableStateOf(name) }
+    Card {
+        Text("Nama panggilan", color = SadoColors.Text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+        androidx.compose.material3.OutlinedTextField(
+            text, { v -> text = v.take(NAME_MAX); if (text.isNotBlank()) onChange(text.trim()) },
+            singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors(),
+            supportingText = { Text("${text.length} / $NAME_MAX", color = SadoColors.TextMuted, fontSize = 12.sp) },
+        )
+    }
+}
+
 @Composable
 private fun Toggle(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -67,16 +81,16 @@ fun SettingsScreen(onProfile: () -> Unit, onPlanner: () -> Unit, onReset: () -> 
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Title("Setting", "Sado v" + my.sado.app.BuildConfig.VERSION_NAME + " · rojak + suara", onBack = onBack)
+        NameCard(s.profile?.name.orEmpty()) { n -> Store.update { st -> st.copy(profile = st.profile?.copy(name = n)) } }
         Card {
             Text("Tema", color = SadoColors.Text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
             Segmented(listOf("Gelap", "Cerah", "Ikut phone"), s.settings.theme) { v -> set { it.copy(theme = v) } }
         }
         BackgroundCard(s.settings.background)
-        PathCard()
         Card {
             Toggle("Bunyi", "Bip rep, kira undur, set siap, suara haiwan", s.settings.sound) { v -> set { it.copy(sound = v) } }
             Toggle("Getaran", "Setiap rep dan butang", s.settings.haptics) { v -> set { it.copy(haptics = v) } }
-            Toggle("Warm-up automatik", "Jumping jack 1 minit sebelum setiap session", s.settings.warmup) { v -> set { it.copy(warmup = v) } }
+            Toggle("Warm-up automatik", "Bersedia 15 saat, kemudian jumping jack 30 saat sebelum setiap session", s.settings.warmup) { v -> set { it.copy(warmup = v) } }
             Toggle("Suara coach", if (s.settings.aiVoice) "Suara AI ElevenLabs" else "TTS phone · Bahasa Melayu kalau ada", s.settings.voice) { v -> set { it.copy(voice = v) } }
             Toggle("Kira rep guna camera AI", "Default bila start move yang support camera", s.settings.cameraReps) { v -> set { it.copy(cameraReps = v) } }
             Toggle("Peringatan character", "Tegur hari workout & bila lama tak datang", s.settings.reminders) { v ->

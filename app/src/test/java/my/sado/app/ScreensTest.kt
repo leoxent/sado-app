@@ -82,6 +82,13 @@ class ScreensTest {
     @Test fun homeRest() = shot("homerest", { Store.update { my.sado.app.data.Care.start(it, my.sado.app.data.Care.SICK, LocalDate.now().toEpochDay() - 2) } }) { HomeScreen({}, {}, {}, {}, {}, {}, {}) }
     @Test fun ramadanOffer() = shot("ramadanoffer") { my.sado.app.ui.RamadanOfferCard() }
     @Test fun home() = shot("home") { HomeScreen({}, {}, {}, {}, {}, {}, {}) }
+    // a 20-letter nickname: one line, the type shrinks to fit
+    @Test fun homeLongName() = shot("homelongname", { Store.update { it.copy(profile = it.profile?.copy(name = "Muhammad Faiq Kadirr")) } }) { HomeScreen({}, {}, {}, {}, {}, {}, {}) }
+    // 0.49 session bits: the 15 s get-ready, a timed set, a max-rep target and its dialog, the glowing button
+    @Test fun warmupReady() = shot("warmupready") { my.sado.app.ui.Warmup({}, {}) }
+    @Test fun timedSet() = shot("timedset") { my.sado.app.ui.TimedSet(30) {} }
+    @Test fun maxRepTarget() = shot("maxreptarget") { my.sado.app.ui.TargetCard("maximum rep", null, maxNote = my.sado.app.ui.maxNote(4, null)) }
+    @Test fun glowButton() = shot("glowbutton") { my.sado.app.ui.PrimaryButton("Jom", glow = true) {} }
     @Test fun welcome() = shot("welcome") { WelcomeScreen(onStart = {}) }
     @Test fun done() = shot("done") { DoneScreen(onHome = {}) }
     @Test fun doneZero() = shot("donezero", { Store.update { it.copy(logs = it.logs + WorkoutLog(LocalDate.now().toEpochDay(), "Push day", 3, listOf(ExerciseLog("push", emptyList(), true)), 0, false)) } }) {
@@ -423,7 +430,6 @@ class ScreensTest {
         Store.update { it.copy(tests = listOf(my.sado.app.data.FitnessTest(d - 56, 12, 45), my.sado.app.data.FitnessTest(d - 28, 18, 60), my.sado.app.data.FitnessTest(d, 24, 80))) }
     }) { my.sado.app.ui.CalendarScreen({}, {}) }
     @Test fun journeyGempal() = shot("journey-gempal", setup = { my.sado.app.data.Store.update { it.copy(settings = it.settings.copy(bodyPath = "gempal")) } }) { my.sado.app.ui.JourneyScreen {} }
-    @Test fun pathCard() = shot("pathcard", setup = { my.sado.app.data.Store.update { it.copy(settings = it.settings.copy(bodyPath = "gempal")) } }) { androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp)) { my.sado.app.ui.PathCard() } }
     @Test fun sport() = shot("sport") { my.sado.app.ui.SportScreen({}, {}) }
     @Test fun settings() = shot("settings") { my.sado.app.ui.SettingsScreen({}, {}, {}, {}, {}, {}) }
     @Test fun food() = shot("food") { my.sado.app.ui.NutritionScreen({}, {}, {}) }
@@ -772,13 +778,17 @@ class ScreensTest {
         // nothing at hand: every move that needed gear has a bodyweight stand-in of the same kind, sets kept
         val bare = b.adapt(moves, b.withGear(vshape4, emptyList()), l)
         bare.forEach { org.junit.Assert.assertNull(it.id, my.sado.app.data.Catalog.get(it.id).need) }
-        moves.zip(bare).forEach { (o, n) -> org.junit.Assert.assertEquals(o.sets, n.sets) }
-        org.junit.Assert.assertEquals("lats", my.sado.app.data.Catalog.get(bare[moves.indexOfFirst { it.id == "pullup" }].id).group)
+        // the week's sets are kept: a move with no stand-in left passes its sets to the same kind of move
+        org.junit.Assert.assertEquals(moves.sumOf { it.sets }, bare.sumOf { it.sets })
+        org.junit.Assert.assertTrue(bare.any { my.sado.app.data.Catalog.get(it.id).group == "lats" })
         // with all the quiz gear nothing changes
         org.junit.Assert.assertEquals(moves, b.adapt(moves, b.withGear(vshape4, b.gearOf(vshape4)), l))
         // yesterday's change no longer applies
         noBarToday()
-        org.junit.Assert.assertNotEquals(my.sado.app.ui.sessionFor("plan").second, my.sado.app.ui.sessionFor("plan", quizGear = true).second)
+        // only a day that has a bar move changes (which day is today depends on the calendar)
+        val quiz = my.sado.app.ui.sessionFor("plan", quizGear = true).second
+        if (quiz.any { my.sado.app.data.Catalog.get(it.id).need == "bar" }) org.junit.Assert.assertNotEquals(my.sado.app.ui.sessionFor("plan").second, quiz)
+        org.junit.Assert.assertTrue(my.sado.app.ui.sessionFor("plan").second.none { my.sado.app.data.Catalog.get(it.id).need == "bar" })
         Store.update { it.copy(gearToday = it.gearToday!!.copy(epochDay = LocalDate.now().toEpochDay() - 1)) }
         org.junit.Assert.assertEquals(my.sado.app.ui.sessionFor("plan").second, my.sado.app.ui.sessionFor("plan", quizGear = true).second)
     }

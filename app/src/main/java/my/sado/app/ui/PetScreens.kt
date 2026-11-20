@@ -143,7 +143,7 @@ fun PetBuddy(s: AppState, modifier: Modifier = Modifier, area: Float = 160f, sta
     val painter = painterResource(picture)
     fun aspectOf(size: androidx.compose.ui.geometry.Size) = if (size.height > 0f) size.width / size.height else 1f
     val (standW, standH) = Pets.sizeDp(pet.kind, stage, aspectOf(painterResource(kind.images[stage]).intrinsicSize))
-    val (rw, rh) = if (sleeping) Pets.sleepSizeDp(standW, standH, aspectOf(painter.intrinsicSize)) else standW to standH
+    val (rw, rh) = if (sleeping) Pets.sleepSizeDp(pet.kind, stage, standW, standH, aspectOf(painter.intrinsicSize)) else standW to standH
     // on the pet screen everything is scaled to fit the card, small ones up to 1.8x; asleep it keeps its awake scale
     val k = fit?.let { minOf(it.value / standH, 1.8f) } ?: 1f
     val w = (rw * k).dp
@@ -680,7 +680,7 @@ fun PetCard(s: AppState, modifier: Modifier = Modifier, onEvolve: (() -> Unit)? 
     val dev = PetDev.override
     val pet = PetDev.shown(s)?.first
     if (pet == null) {
-        if (Pets.unlocked(s)) Callout("Hadiah minggu pertama!", "Seminggu dah ko bertahan. Pilih spirit animal, bagi makan, dan tengok dia membesar.", SadoColors.Pink, modifier, onOpen)
+        if (Pets.unlocked(s)) Callout("Hadiah workout kedua!", "Ko datang balik. Pilih spirit animal, bagi makan, dan tengok dia membesar.", SadoColors.Pink, modifier, onOpen)
         return
     }
     val kind = Pets.kind(pet.kind)
@@ -786,8 +786,8 @@ fun PetScreen(onEvolve: () -> Unit = {}, onBack: () -> Unit) {
 
         if (!Pets.unlocked(s)) {
             Callout(
-                "Hadiah minggu pertama",
-                "Ada kawan baru tunggu ko. Terbuka dalam ${Pets.daysToUnlock(s)} hari lagi.",
+                "Hadiah workout kedua",
+                "Ada kawan baru tunggu ko. Lagi ${Pets.workoutsToUnlock(s)} workout (hari lain) untuk buka.",
                 SadoColors.Pink,
             )
             return@Column
@@ -918,7 +918,7 @@ fun PetTester() {
             PetDev.food = emptyList()
             Store.startSimulation { Pets.simulateFirstWeek(it) }
         }
-        Text("Buang pet buat sementara supaya hadiah minggu pertama keluar kat Home. Boleh pulihkan lepas tu.", color = SadoColors.TextMuted, fontSize = 13.sp)
+        Text("Buang pet buat sementara supaya hadiah workout kedua keluar kat Home. Boleh pulihkan lepas tu.", color = SadoColors.TextMuted, fontSize = 13.sp)
     }
 
     SecondaryButton(if (PetDev.openAll) "Kunci semula haiwan" else "Buka semua haiwan", Modifier.fillMaxWidth()) { PetDev.openAll = !PetDev.openAll }

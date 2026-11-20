@@ -14,6 +14,19 @@ class PlanGroupsTest {
     private fun vshape(equip: List<String>, pull: Int = -1) =
         PlannerAnswers(shape = listOf("vshape"), level = 1, pull = pull, days = 3, time = 20, equip = equip, intensity = 1)
 
+    // the same move with other gear is one exercise: a day never has two lateral raises
+    @Test fun noDayHoldsTheSameMoveTwice() {
+        listOf(emptyList(), listOf("dumbbell"), listOf("band"), listOf("dumbbell", "band"), listOf("dumbbell", "band", "chair")).forEach { equip ->
+            listOf(3, 4, 5).forEach { days ->
+                val a = vshape(equip).copy(days = days)
+                PlanBuilder.build(a, PlanBuilder.startingLadders(a)).allSessions.forEach { s ->
+                    val laterals = s.exercises.count { it.id in setOf("lateral", "bandlat", "bottlelat") }
+                    assertTrue("$equip $days ${s.tag}: ${s.exercises.map { it.id }}", laterals <= 1)
+                }
+            }
+        }
+    }
+
     @Test fun noMoveIsStillPlainDelts() {
         assertTrue(Catalog.moves.none { it.group == "delts" })
         Catalog.moves.filter { it.group != "warmup" }.forEach { assertTrue(it.id, it.group in PlanBuilder.groupNames) }

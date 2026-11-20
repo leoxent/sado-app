@@ -116,7 +116,7 @@ fun HomeScreen(onStart: () -> Unit, onPlanner: () -> Unit, onPlanView: () -> Uni
             Image(painterResource(face), contentDescription = null, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(22.dp)).background(SadoColors.Surface))
             Column(Modifier.weight(1f)) {
                 Text(when { doneToday -> "Hari ni dah settle"; resting != null -> "Mod rehat,"; restDay -> "Hari rest,"; idle -> "Lama tak nampak ko,"; else -> "Jom gerak," }, color = SadoColors.TextMuted, fontSize = 14.sp)
-                Text(s.profile?.name?.ifBlank { null } ?: "Kau", color = SadoColors.Text, fontSize = 34.sp, lineHeight = 36.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+                FitName(s.profile?.name?.ifBlank { null } ?: "Kau")
             }
             Row(
                 Modifier.pressable { streakHelp = true }.clip(RoundedCornerShape(20.dp)).background(SadoColors.Streak.copy(alpha = 0.14f))
@@ -402,4 +402,15 @@ fun Callout(title: String, body: String, color: Color, modifier: Modifier = Modi
 internal fun shortTag(tag: String) = when (tag) {
     "Full body" -> "Full"; "Legs+Push" -> "Legs+"; "Legs+Core" -> "Legs+"; "Circuit" -> "Circuit"; "Rest" -> "Rest"
     else -> tag.substringBefore('+').take(6)
+}
+
+// the name on one line: the type shrinks from 34sp to 22sp to fit, and only past that is it cut with "…"
+@Composable
+internal fun FitName(name: String) {
+    var size by androidx.compose.runtime.remember(name) { androidx.compose.runtime.mutableFloatStateOf(34f) }
+    Text(
+        name, color = SadoColors.Text, fontSize = size.sp, lineHeight = (size + 2).sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold,
+        maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        onTextLayout = { r -> if (r.hasVisualOverflow && size > 22f) size = (size - 2f).coerceAtLeast(22f) },
+    )
 }

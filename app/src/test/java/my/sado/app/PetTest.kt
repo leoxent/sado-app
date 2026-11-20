@@ -33,11 +33,16 @@ class PetTest {
     private fun food(protein: Float) = FoodItem("Nasi ayam", "1 pinggan", 500, 600, protein, source = "Anggaran")
     private fun meals(day: Long, n: Int, protein: Float = 10f) = (0 until n).map { Meal(day, 480 + it * 240, listOf(food(protein))) }
 
-    @Test fun unlocksAfterFirstWeek() {
-        val s = AppState(planStart = t - 6)
-        assertEquals(1, Pets.daysToUnlock(s, today))
-        assertFalse(Pets.unlocked(s, today))
-        assertTrue(Pets.unlocked(s.copy(planStart = t - 7), today))
+    @Test fun unlocksOnTheSecondWorkoutDay() {
+        fun w(day: Long, mini: Boolean = false) = WorkoutLog(day, "Full body", 30, emptyList(), 100, false, mini = mini)
+        val one = AppState(planStart = t - 30, logs = listOf(w(t - 1)))
+        assertEquals(1, Pets.workoutsToUnlock(one))
+        assertFalse(Pets.unlocked(one, today))
+        // a second session the same day or a Sesi mini doesn't count
+        assertFalse(Pets.unlocked(one.copy(logs = one.logs + w(t - 1) + w(t, mini = true)), today))
+        assertTrue(Pets.unlocked(one.copy(logs = one.logs + w(t)), today))
+        // a logged sport counts as a workout day
+        assertTrue(Pets.unlocked(one.copy(sports = listOf(SportLog(t, "Futsal", 60, 1, 400, 50))), today))
     }
 
     private fun adopted(kind: String = "harimau") = Pets.choose(AppState(profile = profile, planStart = t - 10), kind, today)
@@ -176,10 +181,10 @@ class PetTest {
         val s = Pets.simulateFirstWeek(Pets.feed(adopted().copy(planStart = t - 2, meals = meals(t, 1)), today), today)
         assertNull(Pets.active(s))
         assertTrue(s.pets.isEmpty())
-        assertEquals(0, Pets.daysToUnlock(s, today))
+        assertEquals(0, Pets.workoutsToUnlock(s))
         assertTrue(Pets.unlocked(s, today))
-        // an older start stays
-        assertEquals(t - 30, Pets.simulateFirstWeek(AppState(planStart = t - 30), today).planStart)
+        // real workouts stay, only what's missing is added
+        assertEquals(2, Pets.workoutDays(Pets.simulateFirstWeek(AppState(planStart = t - 30), today)).size)
     }
 
     @Test fun onlyActivePetGrowsAndNoDayPaysTwice() {

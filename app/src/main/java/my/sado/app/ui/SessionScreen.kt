@@ -171,6 +171,8 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
     var quitOpen by remember { mutableStateOf(false) }
     var discardOpen by remember { mutableStateOf(false) }
     var giveUpOpen by remember { mutableStateOf(false) }
+    var earlyOpen by remember { mutableStateOf(false) }
+    var maxOpen by remember { mutableStateOf(false) }
     var dropTo by remember { mutableStateOf<String?>(null) }
     var pending by remember { mutableStateOf<Pending?>(null) }
     var offerOpen by remember { mutableStateOf(false) }
@@ -184,6 +186,9 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
     var tgt by rememberSaveable(idx, cur.id) { mutableStateOf<Int?>(null) }
     var extraRest by rememberSaveable(idx, cur.id) { mutableIntStateOf(0) }
     val target = tgt ?: cur.target
+    // a max-rep move: the best set before today, to beat
+    val isMax = Progress.isMaxRep(cur.reps)
+    val maxBefore = remember(cur.id) { if (isMax) Progress.maxRecord(cur.id, Store.state.value.logs) else null }
     val label = tgt?.let { if (move.timed) "${it}s" else "$it" } ?: cur.reps
     // when the current set started, on the active clock (pauses left out)
     var setKey by rememberSaveable { mutableStateOf("") }
@@ -301,7 +306,7 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 if (camOn) PoseCamera(cur.id, onRep = { if (!move.timed && phase == Phase.Work) { reps++; Feedback.rep() } })
                 key(idx, sets.size, cur.id) {
                     if (move.timed) TimedSet(target) { secs -> reps = secs }
-                    else TargetCard(label, if (camOn) reps else null)
+                    else TargetCard(label, if (camOn) reps else null, maxNote = if (isMax) maxNote(maxBefore, sets.filter { !it.failed }.maxOfOrNull { it.reps }) else null)
                 }
                 if (tgt != null) Text("Target diturunkan ke $label lepas set tadi · rest +${extraRest}s", color = SadoColors.Sky, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 if (move.weighted) LoadPicker(kg) { kg = it }
@@ -318,7 +323,12 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                 }
                 if (toast != null) Text(toast!!, color = SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 // no rep tapping: one press per set, reps count as the target unless the camera or timer measured them
-                PrimaryButton(if (sets.size + 1 >= cur.sets) "Set done · last set" else "Set done") {
+                // a timed set glows once its target is reached; Set done before that asks how long it really was
+                val reached = move.timed && reps >= target
+                PrimaryButton(if (sets.size + 1 >= cur.sets) "Set done · last set" else "Set done", glow = reached) {
+                    if (move.timed && reps in 1 until target) { earlyOpen = true; return@PrimaryButton }
+                    // max rep: the number is the user's, so ask it
+                    if (isMax && !camOn) { maxOpen = true; return@PrimaryButton }
                     Feedback.success()
                     logSet(if (reps > 0) reps else target, failed = false)
                 }
@@ -340,7 +350,12 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
                     move.tips.forEachIndexed { i, t -> Text("${i + 1}. $t", color = SadoColors.TextMuted, fontSize = 13.sp) }
                 }
             }
-            Phase.Effort -> EffortAsk(move.name, failed = sets.any { it.failed }) { rir ->
+            Phase.Effort -> EffortAsk(
+                move.name, failed = sets.any { it.failed },
+                // max rep at or below the record: Easy is fine to say, but it isn't progress yet
+                note = if (isMax && maxBefore != null && (sets.filter { !it.failed }.maxOfOrNull { it.reps } ?: 0) <= maxBefore)
+                    "Rekod tak naik (max $maxBefore). Walaupun Easy, sesi depan kena buat minimum ${maxBefore + 1} rep baru dikira naik." else null,
+            ) { rir ->
                 for (i in sets.indices) sets[i] = sets[i].copy(rir = rir)
                 if (idx == plan.lastIndex) { logs += ExerciseLog(cur.id, sets.toList()); sets.clear(); finish(false) } else phase = Phase.Rest
             }
@@ -359,6 +374,16 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
         }
     }
 
+    // a timed set stopped before its target: the seconds really done, and the next set follows them
+    if (maxOpen) MaxRepDialog(start = sets.lastOrNull()?.reps ?: maxBefore ?: target, record = maxBefore, onDismiss = { maxOpen = false }) { n ->
+        maxOpen = false
+        Feedback.success()
+        logSet(n, failed = false)
+    }
+    if (earlyOpen) GiveUpDialog(true, target, reps, early = true, onDismiss = { earlyOpen = false }) { done ->
+        earlyOpen = false
+        logSet(done, failed = done < target)
+    }
     if (giveUpOpen) GiveUpDialog(move.timed, target, if (move.timed) reps else (target - 1).coerceAtLeast(0), onDismiss = { giveUpOpen = false }) { done ->
         giveUpOpen = false
         Feedback.tap()
@@ -467,16 +492,16 @@ fun SessionScreen(source: String, onExercise: (String) -> Unit, onFinished: () -
 
 // "Tak larat": how many reps (or seconds) were really done before stopping
 @Composable
-private fun GiveUpDialog(timed: Boolean, target: Int, start: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+private fun GiveUpDialog(timed: Boolean, target: Int, start: Int, early: Boolean = false, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
     var done by remember { mutableIntStateOf(start.coerceIn(0, target)) }
     val step = if (timed) 5 else 1
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = SadoColors.Surface,
-        title = { Text("Tak larat? Takpe.", color = SadoColors.Text, fontWeight = FontWeight.ExtraBold) },
+        title = { Text(if (early) "Berhenti awal?" else "Tak larat? Takpe.", color = SadoColors.Text, fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(if (timed) "Berapa saat sempat tahan?" else "Berapa rep betul-betul siap?", color = SadoColors.TextMuted)
+                Text(if (early) "Timer kata ${start}s. Betulkan kalau tak tepat." else if (timed) "Berapa saat sempat tahan?" else "Berapa rep betul-betul siap?", color = SadoColors.TextMuted, textAlign = TextAlign.Center)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     SecondaryButton("−", Modifier.size(width = 56.dp, height = 48.dp)) { done = (done - step).coerceAtLeast(0) }
                     Text(if (timed) "${done}s" else "$done", color = SadoColors.Text, fontSize = 44.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
@@ -508,23 +533,64 @@ private fun LoadPicker(kg: Float, onChange: (Float) -> Unit) {
 }
 
 @Composable
-private fun TargetCard(target: String, camReps: Int?) {
+internal fun TargetCard(target: String, camReps: Int?, maxNote: String? = null) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(SadoColors.Accent.copy(alpha = 0.10f)).border(2.dp, SadoColors.Accent.copy(alpha = 0.4f), RoundedCornerShape(28.dp)).padding(vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("TARGET", color = SadoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 3.sp)
         Text(target, color = SadoColors.Text, fontSize = 56.sp, lineHeight = 60.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+        if (maxNote != null) Text(maxNote, color = SadoColors.Streak, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
         Text(
-            if (camReps != null) "Camera kira: $camReps rep" else "Buat sampai tinggal 1–2 rep, then tekan Set done",
+            if (camReps != null) "Camera kira: $camReps rep" else if (maxNote != null) "Buat sebanyak mungkin, then tekan Set done" else "Buat sampai tinggal 1–2 rep, then tekan Set done",
             color = SadoColors.TextMuted, fontSize = 13.sp, textAlign = TextAlign.Center,
         )
     }
 }
 
+// under a max-rep target: the number to beat, and today's best once a set is in
+internal fun maxNote(record: Int?, today: Int?): String {
+    val best = maxOf(record ?: 0, today ?: 0)
+    return when {
+        best == 0 -> "(Rekod pertama · buat sebanyak mungkin)"
+        today != null && record != null && today > record -> "(Rekod baru $today! · cuba ${today + 1})"
+        else -> "(Rekod sebelum ni: max $best · kena buat ${best + 1})"
+    }
+}
+
+// a max-rep set: how many were really done
+@Composable
+internal fun MaxRepDialog(start: Int, record: Int?, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    var n by remember { mutableIntStateOf(start.coerceAtLeast(1)) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SadoColors.Surface,
+        title = { Text("Berapa max rep kau?", color = SadoColors.Text, fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SecondaryButton("−", Modifier.size(width = 56.dp, height = 48.dp)) { n = (n - 1).coerceAtLeast(0) }
+                    Text("$n", color = SadoColors.Text, fontSize = 44.sp, fontFamily = Display, fontWeight = FontWeight.ExtraBold)
+                    SecondaryButton("+", Modifier.size(width = 56.dp, height = 48.dp)) { n = (n + 1).coerceAtMost(100) }
+                }
+                Text(
+                    when {
+                        record == null -> "Rekod pertama untuk move ni."
+                        n > record -> "Rekod baru! Sebelum ni max $record."
+                        else -> "Rekod sebelum ni max $record. Kena buat ${record + 1} untuk naik."
+                    },
+                    color = if (record != null && n > record) SadoColors.Accent else SadoColors.TextMuted, fontSize = 13.sp, textAlign = TextAlign.Center,
+                )
+            }
+        },
+        confirmButton = { TextButton({ onSave(n) }) { Text("Simpan set", color = SadoColors.Accent, fontWeight = FontWeight.ExtraBold) } },
+        dismissButton = { TextButton(onDismiss) { Text("Batal", color = SadoColors.Text) } },
+    )
+}
+
 // asked once per move after its last set; the answer drives the move ladder
 @Composable
-private fun EffortAsk(moveName: String, failed: Boolean, onAnswer: (Int) -> Unit) {
+private fun EffortAsk(moveName: String, failed: Boolean, note: String? = null, onAnswer: (Int) -> Unit) {
     // pick, then save: the last "Set done" press can't land on an answer, and the button says what the answer does
     var picked by remember { mutableStateOf<Int?>(null) }
     val options = listOf(
@@ -538,6 +604,7 @@ private fun EffortAsk(moveName: String, failed: Boolean, onAnswer: (Int) -> Unit
         Image(painterResource(R.drawable.face_think), null, Modifier.height(110.dp))
     }
     Text("Jawapan ni tentukan target rep sesi depan.", color = SadoColors.TextMuted, fontSize = 13.sp)
+    if (note != null) Text(note, color = SadoColors.Streak, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     options.forEachIndexed { i, o ->
         val c = listOf(SadoColors.Accent, SadoColors.Sky, SadoColors.Violet, SadoColors.Streak)[i]
         val on = picked == i
@@ -570,7 +637,7 @@ private fun EffortAsk(moveName: String, failed: Boolean, onAnswer: (Int) -> Unit
 private data class EffortOption(val label: String, val sub: String, val effect: String, val rir: Int)
 
 @Composable
-private fun TimedSet(target: Int, onSeconds: (Int) -> Unit) {
+internal fun TimedSet(target: Int, onSeconds: (Int) -> Unit) {
     var running by remember { mutableStateOf(false) }
     var secs by remember { mutableIntStateOf(0) }
     LaunchedEffect(running) {
@@ -578,44 +645,61 @@ private fun TimedSet(target: Int, onSeconds: (Int) -> Unit) {
             delay(1000)
             secs++
             onSeconds(secs)
-            if (secs == target) Feedback.success()
+            // counts down to the target, a word of push at the middle of a longer hold, and stops itself at the target:
+            // the breather before pressing Set done is not part of the set
+            if (target - secs in 1..3) Feedback.countdown()
+            if (target >= HALFWAY_MIN && secs == target / 2) Coach.say(Lines.halfway)
+            if (secs >= target) { running = false; Feedback.success(); Coach.say(Lines.timedDone) }
         }
     }
+    val done = secs >= target
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(
             Modifier.size(200.dp).clip(CircleShape).background(SadoColors.Accent.copy(alpha = 0.1f)).border(4.dp, SadoColors.Accent, CircleShape)
-                .clickable { running = !running; Feedback.tap() },
+                .clickable(enabled = !done) { running = !running; Feedback.tap() },
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("${secs}s", color = SadoColors.Text, fontSize = 56.sp, fontWeight = FontWeight.ExtraBold)
-                Text(if (running) "tekan untuk pause" else "tekan untuk start", color = SadoColors.TextMuted, fontSize = 13.sp)
+                // seconds left, then "Siap" once the target is held
+                Text(if (done) "Siap!" else "${target - secs}s", color = if (done) SadoColors.Accent else SadoColors.Text, fontSize = if (done) 44.sp else 56.sp, fontWeight = FontWeight.ExtraBold)
+                Text("sasaran ${target}s", color = SadoColors.TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(if (done) "rehat jap, then Set done" else if (running) "tekan untuk pause" else if (secs == 0) "tekan untuk start" else "tekan untuk sambung", color = SadoColors.TextMuted, fontSize = 13.sp)
             }
         }
-        Bar(secs.toFloat() / target.coerceAtLeast(1))
+        Bar((secs.toFloat() / target.coerceAtLeast(1)).coerceAtMost(1f), SadoColors.Accent)
     }
 }
 
+// a timed set of at least this many seconds gets a word at its middle
+private const val HALFWAY_MIN = 20
+
+// seconds to get ready before the warm-up move starts
+private const val WARMUP_READY = 15
+
 @Composable
-private fun Warmup(onDone: () -> Unit, onQuit: () -> Unit) {
+internal fun Warmup(onDone: () -> Unit, onQuit: () -> Unit) {
     val items = if (my.sado.app.data.Progress.lowImpact(my.sado.app.data.Store.state.value)) Catalog.warmupLow else Catalog.warmup
+    // 15 seconds to get ready first (the coach names the move), then the move itself
+    var ready by rememberSaveable { mutableStateOf(true) }
     var i by rememberSaveable { mutableIntStateOf(0) }
-    var left by rememberSaveable { mutableIntStateOf(items[0].second) }
-    LaunchedEffect(i) {
+    var left by rememberSaveable { mutableIntStateOf(WARMUP_READY) }
+    LaunchedEffect(i, ready) {
         while (left > 0) {
             delay(1000)
             left--
             if (left in 1..3) Feedback.countdown()
         }
         Feedback.success()
-        if (i < items.lastIndex) { left = items[i + 1].second; i++ } else onDone()
+        if (ready) { ready = false; left = items[0].second; Coach.say(Lines.warmupGo) }
+        else if (i < items.lastIndex) { left = items[i + 1].second; i++ } else onDone()
     }
-    Title("Warm-up", "1 minit je · badan panas, kurang risiko injury") { onQuit() }
+    Title("Warm-up", "${items[i].second} saat je · badan panas, kurang risiko injury") { onQuit() }
     Card(padding = 24) {
+        if (ready) Label("Bersedia · lepas ni")
         Text(items[i].first, color = SadoColors.Text, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-        Text(items[i].third, color = SadoColors.TextMuted, fontSize = 13.sp)
-        Text("${left}s", color = SadoColors.Accent, fontSize = 56.sp, fontWeight = FontWeight.ExtraBold)
-        Bar(1f - left.toFloat() / items[i].second)
+        Text(if (ready) "Mula dalam ${left} saat. Berdiri, ruang cukup, tarik nafas." else items[i].third, color = SadoColors.TextMuted, fontSize = 13.sp)
+        Text("${left}s", color = if (ready) SadoColors.Sky else SadoColors.Accent, fontSize = 56.sp, fontWeight = FontWeight.ExtraBold)
+        Bar(1f - left.toFloat() / (if (ready) WARMUP_READY else items[i].second), if (ready) SadoColors.Sky else SadoColors.Accent)
     }
     if (items.size > 1) items.forEachIndexed { k, (name, secs, _) ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -655,7 +739,7 @@ private fun Rest(seconds: Int, nextLabel: String, next: PlannedExercise, onDone:
         SecondaryButton("−15s", Modifier.weight(1f)) { left = (left - 15).coerceAtLeast(0) }
         SecondaryButton("+15s", Modifier.weight(1f)) { left += 15 }
     }
-    PrimaryButton(if (left == 0) "Jom" else "Skip rest") { onDone(left) }
+    PrimaryButton(if (left == 0) "Jom" else "Skip rest", glow = left == 0) { onDone(left) }
     NextUp(nextLabel, next)
 }
 

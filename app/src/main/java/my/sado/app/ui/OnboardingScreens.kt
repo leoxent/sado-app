@@ -55,6 +55,9 @@ internal fun NumField(label: String, value: String, modifier: Modifier, onChange
     )
 }
 
+/** A nickname's longest length; Home fits it on one line by shrinking the type. */
+const val NAME_MAX = 20
+
 @Composable
 fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = SadoColors.Accent, unfocusedBorderColor = SadoColors.Track,
@@ -87,7 +90,7 @@ fun ProfileSetupScreen(onBack: () -> Unit, onDone: () -> Unit) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Title("Kenal kau sikit", "Bukan akaun · disimpan dalam phone je", onBack = onBack)
-        OutlinedTextField(name, { name = it.take(20) }, label = { Text("Nama panggilan") }, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
+        OutlinedTextField(name, { name = it.take(NAME_MAX) }, label = { Text("Nama panggilan") }, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
         Label("Jantina · untuk kira kalori")
         Segmented(listOf("Lelaki", "Perempuan"), sex) { sex = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

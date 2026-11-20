@@ -148,7 +148,7 @@ fun WorkoutPreviewScreen(source: String, onBack: () -> Unit, onExercise: (String
                 Step("0", SadoColors.Sky)
                 Column(Modifier.weight(1f)) {
                     Text("Warm-up", color = SadoColors.Text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Jumping jack 1 minit", color = SadoColors.TextMuted, fontSize = 13.sp)
+                    Text("Jumping jack 30 saat", color = SadoColors.TextMuted, fontSize = 13.sp)
                 }
             }
             moves.forEachIndexed { i, (e, m) ->

@@ -76,6 +76,7 @@ object PlanBuilder {
      */
     fun adapt(list: List<PlannedExercise>, a: PlannerAnswers, ladders: Map<String, LadderProgress>): List<PlannedExercise> {
         val out = mutableListOf<PlannedExercise>()
+        val left = mutableListOf<PlannedExercise>()
         list.forEach { e ->
             val m = Catalog.get(e.id)
             if (fits(m, a)) { out += e; return@forEach }
@@ -84,7 +85,15 @@ object PlanBuilder {
                 .map { Catalog.get(progressed(it.id, a, ladders)) }.distinctBy { it.id }
                 .filter { it.id !in taken && fits(it, a) && (it.group == m.group || it.muscles.any { x -> x in m.muscles }) }
                 .maxByOrNull { c -> (if (c.group == m.group) 4 else 0) + c.muscles.count { it in m.muscles } * 5 + c.secondary.count { it in m.muscles } + if (c.timed == m.timed) 1 else 0 }
-            if (sub != null) out += dose(sub, a).let { (_, reps, target) -> PlannedExercise(sub.id, e.sets, reps, target) }
+            if (sub != null) { out += dose(sub, a).let { (_, reps, target) -> PlannedExercise(sub.id, e.sets, reps, target) }; return@forEach }
+            left += e
+        }
+        // no other move of the kind fits today: its sets go to one of the same group (or the same muscles), so the volume stays
+        left.forEach { e ->
+            val m = Catalog.get(e.id)
+            val k = out.indexOfFirst { Catalog.get(it.id).group == m.group }.takeIf { it >= 0 }
+                ?: out.indexOfFirst { Catalog.get(it.id).muscles.any { x -> x in m.muscles } }
+            if (k >= 0) out[k] = out[k].copy(sets = out[k].sets + e.sets)
         }
         return out
     }
@@ -172,7 +181,11 @@ object PlanBuilder {
     // at most this many moves of one group in a day (focus groups excepted), so a day isn't four push-up variants
     private const val PER_DAY = 2
     // bump when the builder changes how it fills a week: saved plans are rebuilt once from the saved answers
-    const val VERSION = 3
+    const val VERSION = 4
+
+    // a move's name without its gear: "Band lateral raise" and "Water bottle lateral raise" are both "lateral raise"
+    private val GEAR_WORDS = Regex("""\(.*?\)|\b(band|water bottle|backpack|dumbbell|towel|weighted|bicep)\b""", RegexOption.IGNORE_CASE)
+    internal fun bare(name: String) = name.replace(GEAR_WORDS, "").trim().replace(Regex("""\s+"""), " ").lowercase()
 
     val tagLabels = mapOf(
         "Pull" to "Pull day", "Push" to "Push day",
@@ -239,6 +252,8 @@ object PlanBuilder {
         val picked = order.associateWith { mutableListOf<Move>() }
         val got = mutableMapOf<String, Int>()
         val used = mutableSetOf<String>()
+        // extra sets on a move whose group has nothing else to add that day (side delts: only lateral raises)
+        val bonus = mutableMapOf<Pair<String, String>, Int>()
         repeat(n) { round ->
             order.forEach { tag ->
                 val mine = picked.getValue(tag)
@@ -258,15 +273,25 @@ object PlanBuilder {
                 // shape group keeps its big compound moves instead
                 val dayMuscles = mine.flatMap { Catalog.get(idOf(it)).muscles }.toSet()
                 val fresh = { m: Move -> m.group in focus || m.group in core || mine.none { it.group == m.group } || Catalog.get(idOf(m)).muscles.any { it !in dayMuscles } }
+                // the same move with other gear (a lateral raise with dumbbells, a band, water bottles) is one exercise:
+                // a day never holds two of them, a focus group gets its volume from sets instead
+                val twin = { m: Move -> bare(Catalog.get(idOf(m)).name).let { n -> mine.any { o -> o.group == m.group && bare(Catalog.get(idOf(o)).name) == n } } }
                 var ex: Move? = null
                 val anchor = anchors[tag]?.takeIf { round == 0 && rating(a, it) > 1 }
                 for (g in listOfNotNull(anchor) + groups.filterNot { full(it) }) {
-                    ex = pool.firstOrNull { it.group == g && !taken(it) && idOf(it) !in used && fresh(it) }
-                        ?: pool.firstOrNull { it.group == g && !taken(it) && fresh(it) }
-                        ?: pool.firstOrNull { it.group == g && !taken(it) && idOf(it) !in used } ?: pool.firstOrNull { it.group == g && !taken(it) }
+                    ex = pool.firstOrNull { it.group == g && !taken(it) && !twin(it) && idOf(it) !in used && fresh(it) }
+                        ?: pool.firstOrNull { it.group == g && !taken(it) && !twin(it) && fresh(it) }
+                        ?: pool.firstOrNull { it.group == g && !taken(it) && !twin(it) && idOf(it) !in used } ?: pool.firstOrNull { it.group == g && !taken(it) && !twin(it) }
                     if (ex != null) break
+                    // a focus group short of its floor with only twins left: one more set on the move already there
+                    val tw = mine.firstOrNull { it.group == g }
+                    if ((g in focus || g in core) && (got[g] ?: 0) < FOCUS_SETS && tw != null && (bonus[tag to idOf(tw)] ?: 0) < 2) {
+                        bonus[tag to idOf(tw)] = (bonus[tag to idOf(tw)] ?: 0) + 1
+                        got[g] = (got[g] ?: 0) + dayCount.getValue(tag)
+                        return@forEach
+                    }
                 }
-                if (ex == null) ex = pool.firstOrNull { !taken(it) && idOf(it) !in used } ?: pool.firstOrNull { !taken(it) }
+                if (ex == null) ex = pool.firstOrNull { !taken(it) && !twin(it) && idOf(it) !in used } ?: pool.firstOrNull { !taken(it) && !twin(it) } ?: pool.firstOrNull { !taken(it) }
                 if (ex != null) {
                     mine += ex
                     used += idOf(ex)
@@ -287,7 +312,7 @@ object PlanBuilder {
             PlanSession(tag, tagLabels[tag] ?: tag, picked.getValue(tag).sortedBy { m -> rank.indexOf(m.group).let { if (it < 0) 99 else it } }.map { m ->
                 val id = idOf(m)
                 val (sets, reps, target) = dose(Catalog.get(id), a)
-                PlannedExercise(id, sets, reps, target)
+                PlannedExercise(id, sets + (bonus[tag to id] ?: 0), reps, target)
             })
         }
         return Week(week, sessions, got, days, score)

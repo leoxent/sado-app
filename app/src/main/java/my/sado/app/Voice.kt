@@ -138,7 +138,7 @@ object Coach {
         val numbers = (1..my.sado.app.data.Progress.MAX_SETS).map { Lines.sets(it) } +
             ((1..50).map { "$it" } + (5..180 step 5).map { "${it}s" } + moves.map { it.reps }).distinct().map { Lines.reps(it) }
         val cues = (my.sado.app.ai.Motions.reps.values.map { it.shallowCue } + my.sado.app.ai.Motions.formCues).flatMap { Lines.cue(it) }
-        val workout = Lines.warmup + Lines.warmupLow + (2..6).flatMap { Lines.set(it, last = false) } + Lines.set(2, last = true) +
+        val workout = Lines.warmup + Lines.warmupLow + Lines.warmupGo + Lines.halfway + Lines.timedDone + (2..6).flatMap { Lines.set(it, last = false) } + Lines.set(2, last = true) +
             listOf(60, 90, 120).flatMap { Lines.rest(it) } + Lines.restEnding + Lines.effort + Lines.done + Lines.zero + Lines.quit + Lines.cancel
         val photo = listOf(10, 3).flatMap { Lines.countdown(it) } + Lines.photoSaved + Lines.photoPartial + Lines.photoFail
         return listOf(
@@ -168,8 +168,12 @@ data class PhraseGroup(val title: String, val lines: List<String>, val picked: B
  * isn't spoken. Numbers are written as digits here and turned into Malay words before speaking.
  */
 object Lines {
-    val warmup = listOf("[cheerful] Okay! Warm-up dulu… jumping jack 1 minit je, relax.")
-    val warmupLow = listOf("[cheerful] Okay! Warm-up dulu… march in place 1 minit, tak payah lompat.")
+    val warmup = listOf("[cheerful] Okay! Kita mula dengan jumping jack… 15 saat lagi, bersedia.")
+    val warmupLow = listOf("[cheerful] Okay! Kita mula dengan march in place… 15 saat lagi, bersedia.")
+    val warmupGo = listOf("[energetic] Go! 30 saat je.")
+    // a timed set past its middle
+    val timedDone = listOf("[cheerful] Siap! Tarik nafas dulu, then tekan Set done.", "[cheerful] Cukup masa! Lepak jap, then Set done.")
+    val halfway = listOf("[energetic] Dah separuh… sikit lagi!", "[energetic] Separuh dah! Teruskan!")
 
     // a chained intro: every part is a whole short sentence with the same tag, so the joins sound like two sentences
     fun introName(name: String) = listOf("[energetic] Next… $name!", "[energetic] Okay, $name pula!")

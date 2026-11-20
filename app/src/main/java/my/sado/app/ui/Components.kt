@@ -19,6 +19,7 @@ import android.os.VibratorManager
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -59,6 +60,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -128,21 +131,42 @@ object SadoIcons {
 
 /** Chunky game-style button: a darker block sits underneath and the face sinks into it on press. */
 @Composable
-fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
-    ChunkyButton(text, modifier.fillMaxWidth(), enabled, SadoColors.Accent, SadoColors.AccentDeep, SadoColors.OnAccent, 16, onClick)
+fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, glow: Boolean = false, onClick: () -> Unit) =
+    ChunkyButton(text, modifier.fillMaxWidth(), enabled, SadoColors.Accent, SadoColors.AccentDeep, SadoColors.OnAccent, 16, onClick, glow && enabled)
 
 @Composable
 fun SecondaryButton(text: String, modifier: Modifier = Modifier, color: Color = SadoColors.Text, onClick: () -> Unit) =
     ChunkyButton(text, modifier, true, SadoColors.Surface2, SadoColors.Deep, color, 14, onClick)
 
 @Composable
-private fun ChunkyButton(text: String, modifier: Modifier, enabled: Boolean, face: Color, under: Color, content: Color, size: Int, onClick: () -> Unit) {
+private fun ChunkyButton(text: String, modifier: Modifier, enabled: Boolean, face: Color, under: Color, content: Color, size: Int, onClick: () -> Unit, glow: Boolean = false) {
     val src = remember { MutableInteractionSource() }
+    // "press me now": a halo that breathes around the button and a light sweep across its face
+    val pulse = if (glow) androidx.compose.animation.core.rememberInfiniteTransition(label = "glow") else null
+    val halo = pulse?.animateFloat(0f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "halo")
+    val sweep = pulse?.animateFloat(-0.4f, 1.4f, androidx.compose.animation.core.infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "sweep")
+    val haloColor = face
     val pressed by src.collectIsPressedAsState()
     val depth by animateFloatAsState(if (pressed && enabled) 0f else 4f, tween(70), label = "depth")
     val faceColor by animateColorAsState(if (enabled) face else SadoColors.Surface2, label = "face")
     Box(
         modifier
+            .then(
+                if (halo == null) Modifier else Modifier.drawBehind {
+                    val t = halo.value
+                    // two rings a half-beat apart, each growing out and fading
+                    for (k in 0..1) {
+                        val p = (t + k * 0.5f) % 1f
+                        val g = (2f + 14f * p).dp.toPx()
+                        drawRoundRect(
+                            haloColor.copy(alpha = 0.45f * (1f - p)),
+                            topLeft = androidx.compose.ui.geometry.Offset(-g, -g),
+                            size = androidx.compose.ui.geometry.Size(this.size.width + 2 * g, this.size.height + 2 * g),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(20.dp.toPx() + g),
+                        )
+                    }
+                },
+            )
             .height(60.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(if (enabled) under else SadoColors.Surface)
@@ -150,7 +174,19 @@ private fun ChunkyButton(text: String, modifier: Modifier, enabled: Boolean, fac
     ) {
         Box(
             Modifier.fillMaxWidth().height(56.dp).offset(y = (4f - depth).dp)
-                .clip(RoundedCornerShape(20.dp)).background(faceColor),
+                .clip(RoundedCornerShape(20.dp)).background(faceColor)
+                .then(
+                    if (sweep == null) Modifier else Modifier.drawWithContent {
+                        drawContent()
+                        val x = this.size.width * sweep.value
+                        drawRect(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                0f to Color.Transparent, 0.5f to Color.White.copy(alpha = 0.55f), 1f to Color.Transparent,
+                                start = androidx.compose.ui.geometry.Offset(x - this.size.height, 0f), end = androidx.compose.ui.geometry.Offset(x + this.size.height, this.size.height),
+                            ),
+                        )
+                    },
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Text(text, color = if (enabled) content else SadoColors.TextMuted, fontSize = size.sp, fontWeight = FontWeight.ExtraBold, fontFamily = Display, letterSpacing = 0.5.sp, maxLines = 1)

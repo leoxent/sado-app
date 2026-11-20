@@ -37,7 +37,7 @@ object Store {
     private fun migrate(state: AppState): AppState {
         // 5 → 15 levels: old Kurus/Berisi/Fit/Sado/Beast map to tier I of the same body
         val s0 = if (state.levelFloor >= 0) state else state.copy(levelFloor = Progress.oldLevel(state) * 3)
-        val s = Pets.migrate(s0.copy(peakXp = maxOf(s0.peakXp, s0.xp), answers = s0.answers?.let(::splitDelts), logs = HrStore.moveOut(s0.logs)))
+        val s = Progress.lockPath(Pets.migrate(s0.copy(peakXp = maxOf(s0.peakXp, s0.xp), answers = s0.answers?.let(::splitDelts), logs = HrStore.moveOut(s0.logs))))
         // a plan from an older builder is rebuilt once from the saved answers; ladders and progress stay
         if (s.plan != null && s.answers != null && s.planBuilt < PlanBuilder.VERSION)
             return s.copy(plan = PlanBuilder.build(s.answers, s.ladders), planBuilt = PlanBuilder.VERSION)
@@ -63,7 +63,7 @@ object Store {
     }
 
     fun update(change: (AppState) -> AppState) {
-        val next = Pets.settle(change(_state.value)) // a deleted log takes its EXP back
+        val next = Progress.lockPath(Pets.settle(change(_state.value))) // a deleted log takes its EXP back
         _state.value = next
         val tmp = File(file.parentFile, file.name + ".tmp")
         tmp.writeText(json.encodeToString(AppState.serializer(), next))

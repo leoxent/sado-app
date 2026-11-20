@@ -113,13 +113,13 @@ object Catalog {
     )
 
     val warmup = listOf(
-        // one move only: a short warm-up is one people actually do
-        Triple("Jumping jack", 60, "Slow dulu, then laju sikit. Naikkan heart rate."),
+        // one move only, 30 seconds after a 15-second get-ready: a short warm-up is one people actually do
+        Triple("Jumping jack", 30, "Slow dulu, then laju sikit. Naikkan heart rate."),
     )
 
-    // low-impact: same minute, no jumping, kinder on heavy knees and ankles
+    // low-impact: same 30 seconds, no jumping, kinder on heavy knees and ankles
     val warmupLow = listOf(
-        Triple("March in place", 60, "Angkat lutut, hayun tangan. Tak payah lompat, sendi selamat."),
+        Triple("March in place", 30, "Angkat lutut, hayun tangan. Tak payah lompat, sendi selamat."),
     )
 
     // progression ladders: index = rung

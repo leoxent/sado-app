@@ -108,11 +108,11 @@ object Pets {
     const val LEGEND_H = 276f
     const val LEGEND_LONG = 340f
     const val MAX_W_ASLEEP = 300f
-    const val MIN_W_ASLEEP = 60f // low drawings stay easy to see and tap
+    const val MIN_W_ASLEEP = 30f
 
     private val realSize = mapOf(
         "harimau" to listOf(0.35f, 0.65f, 1.0f),
-        "helang" to listOf(0.15f, 0.35f, 0.5f),
+        "helang" to listOf(0.15f, 0.45f, 0.65f), // Remaja and Dewasa a little bigger than real life: they read too small
         "beruang" to listOf(0.3f, 0.6f, 1.2f),
         "seladang" to listOf(0.9f, 1.3f, 1.7f),
         "buaya" to listOf(0.4f, 1.2f, 1.8f), // length (a cartoon croc has a big head, so less than real life)
@@ -136,13 +136,27 @@ object Pets {
         return w to h
     }
 
+    // How much of each drawing is the animal (opaque pixels), standing then asleep, per stage. A curled-up drawing
+    // fills far more of its picture than a standing one with legs and wings, so matching the pictures' areas made
+    // the sleeping animal up to 3x bigger. Measured from the PNGs; redo when the art changes.
+    private val fill = mapOf(
+        "harimau" to listOf(0.54f to 0.57f, 0.51f to 0.55f, 0.55f to 0.67f, 0.61f to 0.68f),
+        "helang" to listOf(0.46f to 0.59f, 0.45f to 0.48f, 0.45f to 0.49f, 0.47f to 0.55f),
+        "beruang" to listOf(0.56f to 0.72f, 0.53f to 0.70f, 0.57f to 0.72f, 0.58f to 0.76f),
+        "seladang" to listOf(0.42f to 0.57f, 0.44f to 0.57f, 0.47f to 0.62f, 0.48f to 0.62f),
+        "buaya" to listOf(0.37f to 0.66f, 0.40f to 0.62f, 0.45f to 0.62f, 0.46f to 0.61f),
+        "serigala" to listOf(0.46f to 0.67f, 0.39f to 0.70f, 0.42f to 0.73f, 0.46f to 0.72f),
+    )
+
     /**
-     * Width and height in dp for a sleeping drawing of [aspect], given the size it has standing. Lying down it keeps
-     * about the same body area, so it reads as the same animal: lower and longer, but neither puffed up nor shrunk.
+     * Width and height in dp for a sleeping drawing of [aspect], given the size it has standing. Lying down the
+     * animal itself (not its picture) keeps the same area, so it reads as the same animal: lower and longer,
+     * neither puffed up nor shrunk.
      */
-    fun sleepSizeDp(standW: Float, standH: Float, aspect: Float): Pair<Float, Float> {
-        var w = kotlin.math.sqrt(standW * standH * aspect)
-        w = minOf(w, maxOf(standW, MAX_W_ASLEEP)).coerceAtLeast(MIN_W_ASLEEP)
+    fun sleepSizeDp(kind: String, stage: Int, standW: Float, standH: Float, aspect: Float): Pair<Float, Float> {
+        val (awake, asleep) = fill[kind]?.getOrNull(stage) ?: (1f to 1f)
+        var w = kotlin.math.sqrt(standW * standH * awake / asleep * aspect)
+        w = minOf(w, maxOf(standW * 1.15f, MAX_W_ASLEEP)).coerceAtLeast(MIN_W_ASLEEP)
         return w to w / aspect
     }
 
@@ -193,18 +207,21 @@ object Pets {
     fun image(p: Pet) = kind(p.kind).images[stage(p)]
     fun nameOf(p: Pet) = p.name.ifBlank { kind(p.kind).defaultName }
 
-    const val UNLOCK_DAYS = 7
+    /** The pet is the gift for coming back: the second day with a full workout or a logged sport. */
+    const val UNLOCK_WORKOUTS = 2
 
     /** The day the user started: the plan, or the first thing they logged. */
     fun startDay(s: AppState): Long? = listOfNotNull(s.planStart, s.logs.minOfOrNull { it.epochDay }, s.meals.minOfOrNull { it.epochDay }).minOrNull()
 
-    /** Days until the pet unlocks as the end-of-first-week gift; 0 = open. */
-    fun daysToUnlock(s: AppState, today: LocalDate = LocalDate.now()): Int {
-        val start = startDay(s) ?: return UNLOCK_DAYS
-        return (UNLOCK_DAYS - (today.toEpochDay() - start)).toInt().coerceAtLeast(0)
-    }
+    /** Days with a full workout (not a Sesi mini, not quit) or a logged sport. */
+    fun workoutDays(s: AppState): Set<Long> =
+        (s.logs.filter { !it.mini && !it.quit }.map { it.epochDay } + s.sports.map { it.epochDay }).toSet()
 
-    fun unlocked(s: AppState, today: LocalDate = LocalDate.now()) = s.pets.isNotEmpty() || daysToUnlock(s, today) == 0
+    /** Workout days still needed before the pet unlocks; 0 = open. Two on the same day count once. */
+    fun workoutsToUnlock(s: AppState): Int = (UNLOCK_WORKOUTS - workoutDays(s).size).coerceAtLeast(0)
+
+    @Suppress("UNUSED_PARAMETER")
+    fun unlocked(s: AppState, today: LocalDate = LocalDate.now()) = s.pets.isNotEmpty() || workoutsToUnlock(s) == 0
 
     /** What stands between the user and adopting one more animal: the goal, and where they are now. */
     data class Lock(val goal: String, val now: String)
@@ -276,12 +293,14 @@ object Pets {
     }
 
     /**
-     * Dev mode: the app as it is on day 8 for someone who has no pet yet, so the first-week gift shows.
+     * Dev mode: the app as it is after the second workout for someone who has no pet yet, so the gift shows.
      * Store keeps the real state to put back afterwards.
      */
     fun simulateFirstWeek(s: AppState, today: LocalDate = LocalDate.now()): AppState {
-        val weekAgo = today.toEpochDay() - UNLOCK_DAYS
-        return s.copy(pets = emptyList(), activePet = null, petDays = emptyMap(), planStart = minOf(s.planStart ?: weekAgo, weekAgo))
+        val t = today.toEpochDay()
+        val need = (0 until UNLOCK_WORKOUTS).map { t - it }.filter { it !in workoutDays(s) }
+        val extra = need.take(workoutsToUnlock(s)).map { WorkoutLog(it, "Full body", 30, emptyList(), 0, false) }
+        return s.copy(pets = emptyList(), activePet = null, petDays = emptyMap(), logs = s.logs + extra)
     }
 
     /**
